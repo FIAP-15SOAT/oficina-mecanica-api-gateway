@@ -167,7 +167,7 @@ terraform plan
 Estado remoto no S3, no mesmo padrão dos demais repositórios de infraestrutura:
 
 - **Bucket**: `bkt-oficina-mecanica`
-- **Chave**: `infra/prod-simulated/gateway/terraform.tfstate`
+- **Chave**: `infra/prod-simulated/api-gateway/terraform.tfstate`
 - **Lock**: nativo do S3 (`use_lockfile = true`)
 
 Cinco recursos: VPC Link, API, stage, security group e log group. Estrutura plana, sem módulos — com essa quantidade, um módulo seria abstração estética.
@@ -211,7 +211,7 @@ job, as descrições dos steps e as dependências `needs`.
 
 | Repositório | Papel |
 |---|---|
-| [oficina-mecanica-api](https://github.com/FIAP-15SOAT/oficina-mecanica-api) | Aplicação NestJS, domínio e manifests Kubernetes |
+| [oficina-mecanica-work-order-service](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service) | Aplicação NestJS, domínio e manifests Kubernetes |
 | [oficina-mecanica-infra-base](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | Fundação de rede na AWS (VPC, subnets, gateways) |
 | [oficina-mecanica-infra-k8s](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | Cluster EKS, node group, ECR e o **caminho privado de entrada** |
 | [oficina-mecanica-infra-database](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-database) | Amazon RDS PostgreSQL, fora do cluster |

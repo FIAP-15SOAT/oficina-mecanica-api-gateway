@@ -123,9 +123,9 @@ Para a Lambda, busque no seu log group o ID da invocação (`faas.invocation_id`
 
 | Não é dela | De quem é |
 |---|---|
-| Rastreamento distribuído | OpenTelemetry na aplicação — [ADR 0005 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-api/blob/main/docs/adr/0005-opentelemetry.md), coletado pelo Agent quando o gate de telemetria do CD da API está ligado |
-| Estrutura e sanitização do log de aplicação | [ADR 0002 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-api/blob/main/docs/adr/0002-logging-estruturado.md) |
-| Semântica de saúde (`/live` vs `/ready`) | [ADR 0003 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-api/blob/main/docs/adr/0003-health-checks.md) |
+| Rastreamento distribuído | OpenTelemetry na aplicação — [ADR 0005 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0005-opentelemetry.md), coletado pelo Agent quando o gate de telemetria do CD da API está ligado |
+| Estrutura e sanitização do log de aplicação | [ADR 0002 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0002-logging-estruturado.md) |
+| Semântica de saúde (`/live` vs `/ready`) | [ADR 0003 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0003-health-checks.md) |
 | Métricas de negócio | Aplicação |
 | Monitor sintético contínuo | [`oficina-mecanica-custom-monitoring`](https://github.com/FIAP-15SOAT/oficina-mecanica-custom-monitoring) provisiona o Synthetic HTTP de `/api/health/ready`, usando `api_endpoint` do state deste gateway; o CD do gateway também tem procedimento manual de verificação — ver [ci-cd.md](ci-cd.md#verificação-externa-após-o-provisionamento) |
 

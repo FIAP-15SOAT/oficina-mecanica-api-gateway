@@ -7,7 +7,7 @@ aws_base_state_key    = "infra/prod-simulated/infra-base/terraform.tfstate"
 aws_base_state_region = "us-east-1"
 
 k8s_state_bucket = "bkt-oficina-mecanica"
-k8s_state_key    = "infra/prod-simulated/k8s/terraform.tfstate"
+k8s_state_key    = "infra/prod-simulated/infra-k8s/terraform.tfstate"
 k8s_state_region = "us-east-1"
 
 nlb_listener_port           = 80  # precisa casar com o aws_lb_listener de oficina-mecanica-infra-k8s
