@@ -72,7 +72,7 @@ Por isso a verificação externa documentada em [`ci-cd.md`](../ci-cd.md) usa **
 
 - **Neste repositório (gateway).** Foi a primeira proposta, por coesão com o VPC Link. Descartada pelos motivos 1 e 2 da decisão — a substituição do node group não é hipótese.
 - **`oficina-mecanica-infra-base`.** **Criaria ciclo**: o target group depende do ASG e a regra depende do SG do cluster, ambos de `k8s`, que já lê `infra-base`. Além disso `infra-base` é fundação de rede pura, hoje sem nenhuma dependência de saída.
-- **`oficina-mecanica-api`.** Não há Terraform lá, e o CD da aplicação roda a cada commit — não se aplica infraestrutura compartilhada num deploy de aplicação.
+- **`oficina-mecanica-work-order-service`.** Não há Terraform lá, e o CD da aplicação roda a cada commit — não se aplica infraestrutura compartilhada num deploy de aplicação.
 - **Um repositório novo de ingress.** Cinco recursos não pagam repositório + CI + CD + segredos + environment + branch protection + mais um `apply` para sequenciar.
 
 *Objeção respondida:* "o repositório `k8s` é app-agnóstico, não deveria conter `nodePort = 30080`". É falso — ele já cria o namespace `oficina` e já carrega `k8s_namespace` como variável. Configuração específica do projeto já mora lá.
@@ -120,4 +120,4 @@ O NLB é criado **sem** security group, e um NLB criado sem SG **não pode receb
 - [Network Load Balancer — security groups](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-security-groups.html)
 - [Kubernetes — Service do tipo NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport)
 - [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) — o balanceador e o output `api_nlb_listener_arn`
-- [ADR 0003 da API — Health checks](https://github.com/FIAP-15SOAT/oficina-mecanica-api/blob/main/docs/adr/0003-health-checks.md), origem da semântica de `/live` e `/ready`
+- [ADR 0003 da API — Health checks](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0003-health-checks.md), origem da semântica de `/live` e `/ready`

@@ -87,7 +87,7 @@ Dois detalhes com consequência:
 |---|---|---|
 | VPC, subnets privadas, CIDR | `oficina-mecanica-infra-base` | fundação de rede |
 | NLB interno, target group, listener, vínculo com o ASG, regra da NodePort | `oficina-mecanica-infra-k8s` | depende do **ASG do node group** e do **security group do cluster**, ambos daquele stack |
-| `Service` da API como `NodePort` | `oficina-mecanica-api` | é manifesto de aplicação |
+| `Service` da API como `NodePort` | `oficina-mecanica-work-order-service` | é manifesto de aplicação |
 | VPC Link, API, stage, throttling, log de acesso | **este repositório** | é o API Gateway |
 | `aws_lambda_permission` da rota de autenticação | `oficina-mecanica-lambda-customer-auth` | política *resource-based* pertence ao dono do recurso |
 
@@ -107,7 +107,7 @@ Sem ciclos. São **duas** remote states diretas aqui, em vez de fazer `k8s` reex
 1. oficina-mecanica-infra-base             VPC, subnets e NAT
 2. oficina-mecanica-infra-database         RDS e segredo de credenciais
 3. oficina-mecanica-infra-k8s              EKS, NLB e NodePort do caminho privado
-4. oficina-mecanica-api                    migrations + Service NodePort + aplicação
+4. oficina-mecanica-work-order-service     migrations + Service NodePort + aplicação
 5. oficina-mecanica-api-gateway            HTTP API e VPC Link
 6. oficina-mecanica-lambda-customer-auth   função + segredo de assinatura + permissão
 7. oficina-mecanica-custom-monitoring     dashboards, alertas e Synthetic
@@ -214,4 +214,4 @@ Os seguintes resultados orientam o diagnóstico. A inspeção do recurso provisi
 - 🔒 [Segurança](security.md) — postura do API Gateway e riscos aceitos.
 - 📊 [Observabilidade](observability.md) — log de acesso, correlação e métricas.
 - 📐 [ADR 0003](adr/0003-integracao-privada-com-o-eks.md) — por que o balanceador não está aqui, e as alternativas descartadas.
-- ☸️ [`oficina-mecanica-api` › Infra · Visão Geral](https://github.com/FIAP-15SOAT/oficina-mecanica-api/blob/main/docs/infra/overview.md) — a solução inteira como sistema.
+- ☸️ [`oficina-mecanica-work-order-service` › Infra · Visão Geral](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/infra/overview.md) — a solução inteira como sistema.

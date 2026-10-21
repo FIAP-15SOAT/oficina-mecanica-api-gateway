@@ -211,7 +211,7 @@ job, as descrições dos steps e as dependências `needs`.
 
 | Repositório | Papel |
 |---|---|
-| [oficina-mecanica-api](https://github.com/FIAP-15SOAT/oficina-mecanica-api) | Aplicação NestJS, domínio e manifests Kubernetes |
+| [oficina-mecanica-work-order-service](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service) | Aplicação NestJS, domínio e manifests Kubernetes |
 | [oficina-mecanica-infra-base](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | Fundação de rede na AWS (VPC, subnets, gateways) |
 | [oficina-mecanica-infra-k8s](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | Cluster EKS, node group, ECR e o **caminho privado de entrada** |
 | [oficina-mecanica-infra-database](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-database) | Amazon RDS PostgreSQL, fora do cluster |
