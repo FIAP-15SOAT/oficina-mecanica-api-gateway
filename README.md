@@ -167,7 +167,7 @@ terraform plan
 Estado remoto no S3, no mesmo padrão dos demais repositórios de infraestrutura:
 
 - **Bucket**: `bkt-oficina-mecanica`
-- **Chave**: `infra/prod-simulated/gateway/terraform.tfstate`
+- **Chave**: `infra/prod-simulated/api-gateway/terraform.tfstate`
 - **Lock**: nativo do S3 (`use_lockfile = true`)
 
 Cinco recursos: VPC Link, API, stage, security group e log group. Estrutura plana, sem módulos — com essa quantidade, um módulo seria abstração estética.

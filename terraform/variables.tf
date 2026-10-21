@@ -43,7 +43,7 @@ variable "k8s_state_bucket" {
 variable "k8s_state_key" {
   description = "S3 object key for the Kubernetes platform Terraform state (source of api_nlb_listener_arn)"
   type        = string
-  default     = "infra/prod-simulated/k8s/terraform.tfstate"
+  default     = "infra/prod-simulated/infra-k8s/terraform.tfstate"
 }
 
 variable "k8s_state_region" {

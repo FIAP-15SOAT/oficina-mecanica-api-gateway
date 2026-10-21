@@ -40,7 +40,7 @@ terraform/
 | Item | Valor |
 |---|---|
 | Bucket | `bkt-oficina-mecanica` |
-| Chave | `infra/prod-simulated/gateway/terraform.tfstate` |
+| Chave | `infra/prod-simulated/api-gateway/terraform.tfstate` |
 | Região | `us-east-1` |
 | Criptografia | `encrypt = true` |
 | Lock | nativo do S3 (`use_lockfile = true`, Terraform ≥ 1.11) |
@@ -89,7 +89,7 @@ Nenhuma exige valor externo além das credenciais — todas têm default.
 | `aws_base_state_key` | `string` | `infra/prod-simulated/infra-base/terraform.tfstate` | Chave do state de `infra-base` | Seleciona o objeto que publica VPC, CIDR e subnets privadas. |
 | `aws_base_state_region` | `string` | `us-east-1` | Região do bucket de `infra-base` | Define a região usada na leitura do state de rede. |
 | `k8s_state_bucket` | `string` | `bkt-oficina-mecanica` | Bucket do state de `k8s` | Localiza o bucket da plataforma que fornece o listener privado. |
-| `k8s_state_key` | `string` | `infra/prod-simulated/k8s/terraform.tfstate` | Chave do state de `k8s` | Seleciona o objeto que publica `api_nlb_listener_arn`. |
+| `k8s_state_key` | `string` | `infra/prod-simulated/infra-k8s/terraform.tfstate` | Chave do state de `k8s` | Seleciona o objeto que publica `api_nlb_listener_arn`. |
 | `k8s_state_region` | `string` | `us-east-1` | Região do bucket de `k8s` | Define a região da leitura do state Kubernetes. |
 | `nlb_listener_port` | `number` | `80` | Porta do listener do NLB interno; único destino do egress do SG do VPC Link. Precisa casar com o `aws_lb_listener` em `oficina-mecanica-infra-k8s` | Restringe o egress do SG; não altera a porta do listener criado na stack Kubernetes. |
 | `customer_auth_function_name` | `string` | `lbd-oficina-mecanica-customer-auth` | Nome da função serverless; compõe o URI de invocação | Monta o URI Lambda sem ler seu state; deve coincidir com `function_name` da Lambda. |
@@ -121,7 +121,7 @@ data "terraform_remote_state" "gateway" {
   backend = "s3"
   config = {
     bucket = "bkt-oficina-mecanica"
-    key    = "infra/prod-simulated/gateway/terraform.tfstate"
+    key    = "infra/prod-simulated/api-gateway/terraform.tfstate"
     region = "us-east-1"
   }
 }
