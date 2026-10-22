@@ -19,7 +19,6 @@ variable "environment" {
 variable "aws_base_state_bucket" {
   description = "S3 bucket name that stores the infra-base Terraform state"
   type        = string
-  default     = "bkt-oficina-mecanica"
 }
 
 variable "aws_base_state_key" {
@@ -37,7 +36,6 @@ variable "aws_base_state_region" {
 variable "k8s_state_bucket" {
   description = "S3 bucket name that stores the Kubernetes platform Terraform state"
   type        = string
-  default     = "bkt-oficina-mecanica"
 }
 
 variable "k8s_state_key" {

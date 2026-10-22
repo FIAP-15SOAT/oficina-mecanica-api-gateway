@@ -154,9 +154,12 @@ npx --yes @redocly/cli@1.34.2 lint openapi/gateway.yaml \
   --skip-rule=no-empty-servers \
   --skip-rule=operation-operationId
 
-# 4. Com credenciais válidas, prever as mudanças
+# 4. Com credenciais válidas, informar o bucket de state e prever as mudanças
 cd terraform
-terraform init
+export TF_STATE_BUCKET=<nome do bucket>
+export TF_VAR_aws_base_state_bucket="$TF_STATE_BUCKET"
+export TF_VAR_k8s_state_bucket="$TF_STATE_BUCKET"
+terraform init -backend-config="bucket=$TF_STATE_BUCKET"
 terraform plan
 ```
 
@@ -166,7 +169,7 @@ terraform plan
 
 Estado remoto no S3, no mesmo padrão dos demais repositórios de infraestrutura:
 
-- **Bucket**: `bkt-oficina-mecanica`
+- **Bucket**: o valor da variável de Actions da organização `TF_STATE_BUCKET`, passado no `terraform init` por `-backend-config`; os states lidos usam o mesmo valor, por `aws_base_state_bucket` e `k8s_state_bucket`
 - **Chave**: `infra/prod-simulated/api-gateway/terraform.tfstate`
 - **Lock**: nativo do S3 (`use_lockfile = true`)
 

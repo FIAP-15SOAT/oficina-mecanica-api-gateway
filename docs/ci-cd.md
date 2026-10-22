@@ -51,7 +51,7 @@ Todo `push` em branch de trabalho valida o repositório **inteiro** — não há
 | 4 | Terraform Init Gateway | Executa `terraform init -backend=false -no-color`: instala os providers sem conectar ao backend. Registry/cache indisponível pode reprovar. |
 | 5 | Terraform Validate Gateway | Executa `terraform validate -no-color` com os schemas instalados; inconsistência de sintaxe, tipo ou referência reprova. |
 | 6 | Configure AWS Credentials | Configura access key, secret key e session token da mesma sessão AWS, em us-east-1. Este step tolera falha e conserva `aws_creds.outcome` para decidir entre plan e nota de skip. |
-| 7 | Terraform Plan Gateway | Só com `aws_creds.outcome == success`: executa init com backend (`-reconfigure`) e plan. Qualquer erro desses comandos reprova o job. |
+| 7 | Terraform Plan Gateway | Só com `aws_creds.outcome == success`: executa init com backend (`-reconfigure` e `-backend-config="bucket=$TF_STATE_BUCKET"`) e plan. Qualquer erro desses comandos reprova o job. |
 | 8 | Note skipped plan in job summary | Só com `aws_creds.outcome == failure`: registra no resumo que a prévia foi pulada; não ignora erro de um plan executado. |
 
 O `plan` é **opcional por decisão**: as credenciais do laboratório são efêmeras e o ambiente fica desligado a maior parte do tempo. Sem elas, o job segue verde e registra no `$GITHUB_STEP_SUMMARY` que a prévia foi pulada — `fmt` e `validate` já garantiram o que precisava ser garantido, e nenhum dos dois exige nuvem.
@@ -108,7 +108,7 @@ Um único job, `terraform-gateway`, sob o environment `production`.
 | 1 | actions/checkout | Obtém a revisão que disparou o workflow; os comandos seguintes usam esse checkout. |
 | 2 | Setup Terraform | Instala/configura a CLI Terraform para os comandos seguintes. |
 | 3 | Configure AWS Credentials | Configura access key, secret key e session token da mesma sessão AWS, em us-east-1. |
-| 4 | Terraform Init | Executa `terraform init -no-color`, instalando providers e configurando o backend S3 real. |
+| 4 | Terraform Init | Executa `terraform init -no-color -backend-config="bucket=$TF_STATE_BUCKET"`, instalando providers e configurando o backend S3 real. |
 | 5 | Terraform Validate | Executa `terraform validate -no-color`; inconsistência de configuração reprova o job. |
 | 6 | Terraform Plan | Executa `terraform plan -no-color`; consulta providers e states necessários e mostra as alterações. |
 | 7 | Terraform Apply | Executa `terraform apply -auto-approve -no-color`; calcula seu próprio plano, pois não há plano salvo no step anterior. |
@@ -179,6 +179,7 @@ Tudo que precisa existir fora do código para o repositório funcionar. Nada aqu
 | `AWS_ACCESS_KEY_ID` | secret | organização | Credencial do laboratório | CI (`plan` opcional) e CD |
 | `AWS_SECRET_ACCESS_KEY` | secret | organização | Credencial do laboratório | CI e CD |
 | `AWS_SESSION_TOKEN` | secret | organização | **Sempre exigido** no AWS Academy | CI e CD |
+| `TF_STATE_BUCKET` | variable | organização | Nome do bucket de state, em variável para trocá-lo sem editar arquivo versionado: vai ao `terraform init` por `-backend-config` e a `TF_VAR_aws_base_state_bucket` e `TF_VAR_k8s_state_bucket`; sem ela, o `init` falha | CI e CD |
 | `BOT_APP_ID` | variable | organização | GitHub App que abre o PR | CI, job `open-pr` |
 | `BOT_PRIVATE_KEY` | secret | organização | Chave privada do mesmo App | CI, job `open-pr` |
 | `ENABLE_DEPLOY` | variable | **repositório** | Interruptor do provisionamento automático | CD |
