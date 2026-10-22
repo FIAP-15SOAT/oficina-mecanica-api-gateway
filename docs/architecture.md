@@ -147,7 +147,7 @@ São falhas **da arquitetura adotada**, não defeitos. Cada uma com sintoma, cau
 
 ```bash
 aws cloudwatch get-metric-statistics --namespace AWS/NetworkELB \
-  --metric-name NewFlowCount --dimensions Name=LoadBalancer,Value=net/nlb-oficina-mecanica-api/<id> \
+  --metric-name NewFlowCount --dimensions Name=LoadBalancer,Value=net/nlb-oficina-mecanica/<id> \
   --start-time <inicio> --end-time <fim> --period 60 --statistics Sum
 ```
 
