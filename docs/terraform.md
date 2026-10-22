@@ -39,7 +39,7 @@ terraform/
 
 | Item | Valor |
 |---|---|
-| Bucket | `bkt-oficina-mecanica` |
+| Bucket | Variável de Actions da organização `TF_STATE_BUCKET`, passada no `terraform init` por `-backend-config` (o `backend.tf` não declara o bucket) |
 | Chave | `infra/prod-simulated/api-gateway/terraform.tfstate` |
 | Região | `us-east-1` |
 | Criptografia | `encrypt = true` |
@@ -78,17 +78,17 @@ Os valores são lidos **sem tratamento que os torne opcionais**: se um contrato 
 
 ## Variáveis de entrada
 
-Nenhuma exige valor externo além das credenciais — todas têm default.
+Todas têm default, exceto `aws_base_state_bucket` e `k8s_state_bucket`: os workflows as preenchem com a variável da organização `TF_STATE_BUCKET`, e o uso local as exporta como `TF_VAR_*`.
 
 | Variável | Tipo | Padrão | Descrição | Uso |
 |---|---|---|---|---|
 | `aws_region` | `string` | `us-east-1` | Região da AWS | Configura o provider que cria a API e compõe o ARN de invocação Lambda. |
 | `project_name` | `string` | `oficina-mecanica` | Base dos nomes de recurso e das tags | Compõe os nomes da API, VPC Link, SG e log group. |
 | `environment` | `string` | `prod-simulated` | Ambiente, usado em `default_tags` | Aplica a tag Environment; o stage continua `$default`. |
-| `aws_base_state_bucket` | `string` | `bkt-oficina-mecanica` | Bucket do state de `infra-base` | Localiza o bucket da rede consumida pelo VPC Link e SG. |
+| `aws_base_state_bucket` | `string` | — | Bucket do state de `infra-base`; os workflows a preenchem com `TF_STATE_BUCKET` | Localiza o bucket da rede consumida pelo VPC Link e SG. |
 | `aws_base_state_key` | `string` | `infra/prod-simulated/infra-base/terraform.tfstate` | Chave do state de `infra-base` | Seleciona o objeto que publica VPC, CIDR e subnets privadas. |
 | `aws_base_state_region` | `string` | `us-east-1` | Região do bucket de `infra-base` | Define a região usada na leitura do state de rede. |
-| `k8s_state_bucket` | `string` | `bkt-oficina-mecanica` | Bucket do state de `k8s` | Localiza o bucket da plataforma que fornece o listener privado. |
+| `k8s_state_bucket` | `string` | — | Bucket do state de `k8s`; os workflows a preenchem com `TF_STATE_BUCKET` | Localiza o bucket da plataforma que fornece o listener privado. |
 | `k8s_state_key` | `string` | `infra/prod-simulated/infra-k8s/terraform.tfstate` | Chave do state de `k8s` | Seleciona o objeto que publica `api_nlb_listener_arn`. |
 | `k8s_state_region` | `string` | `us-east-1` | Região do bucket de `k8s` | Define a região da leitura do state Kubernetes. |
 | `nlb_listener_port` | `number` | `80` | Porta do listener do NLB interno; único destino do egress do SG do VPC Link. Precisa casar com o `aws_lb_listener` em `oficina-mecanica-infra-k8s` | Restringe o egress do SG; não altera a porta do listener criado na stack Kubernetes. |
@@ -120,7 +120,7 @@ Delegar sem entregar o contrato seria delegar pela metade. A forma exata, para n
 data "terraform_remote_state" "gateway" {
   backend = "s3"
   config = {
-    bucket = "bkt-oficina-mecanica"
+    bucket = var.gateway_state_bucket # filled with TF_STATE_BUCKET by the workflow
     key    = "infra/prod-simulated/api-gateway/terraform.tfstate"
     region = "us-east-1"
   }
@@ -165,8 +165,11 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 # Entrar na stack a partir da raiz do clone
 cd terraform
-# Configurar o backend e revisar as alterações
-terraform init
+# Informar o bucket de state, configurar o backend e revisar as alterações
+export TF_STATE_BUCKET="<nome do bucket>"
+export TF_VAR_aws_base_state_bucket="$TF_STATE_BUCKET"
+export TF_VAR_k8s_state_bucket="$TF_STATE_BUCKET"
+terraform init -backend-config="bucket=$TF_STATE_BUCKET"
 terraform plan
 # Provisionar após revisar o plano
 terraform apply
