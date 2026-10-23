@@ -217,7 +217,7 @@ job, as descrições dos steps e as dependências `needs`.
 | [oficina-mecanica-work-order-service](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service) | Aplicação NestJS, domínio e manifests Kubernetes |
 | [oficina-mecanica-infra-base](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | Fundação de rede na AWS (VPC, subnets, gateways) |
 | [oficina-mecanica-infra-k8s](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | Cluster EKS, node group, ECR e o **caminho privado de entrada** |
-| [oficina-mecanica-infra-database](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-database) | Amazon RDS PostgreSQL, fora do cluster |
+| [oficina-mecanica-infra-database-work-order](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-database-work-order) | Amazon RDS PostgreSQL 18 e ElastiCache Valkey 9.1 do `work-order`, fora do cluster |
 | **oficina-mecanica-api-gateway** *(este repositório)* | **Ponto de entrada público** da solução |
 | [oficina-mecanica-lambda-customer-auth](https://github.com/FIAP-15SOAT/oficina-mecanica-lambda-customer-auth) | Autenticação externa de clientes por CPF em função serverless |
 

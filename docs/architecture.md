@@ -105,7 +105,7 @@ Sem ciclos. São **duas** remote states diretas aqui, em vez de fazer `k8s` reex
 
 ```text
 1. oficina-mecanica-infra-base             VPC, subnets e NAT
-2. oficina-mecanica-infra-database         RDS e segredo de credenciais
+2. oficina-mecanica-infra-database-work-order  RDS, ElastiCache Valkey e segredos de credenciais
 3. oficina-mecanica-infra-k8s              EKS, NLB e NodePort do caminho privado
 4. oficina-mecanica-work-order-service     migrations + Service NodePort + aplicação
 5. oficina-mecanica-api-gateway            HTTP API e VPC Link
