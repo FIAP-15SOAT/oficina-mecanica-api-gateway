@@ -16,7 +16,7 @@ Os dois workflows job a job, os gates que os protegem, a tabela completa de conf
 | Workflow | Gatilho | Concorrência | O que faz |
 |---|---|---|---|
 | [`ci.yml`](../.github/workflows/ci.yml) | `push` em `feature/**` e `fix/**` | `ci-<ref>`, **cancela** execuções obsoletas | Valida Terraform e o contrato OpenAPI, tenta um `plan`, abre o PR |
-| [`cd.yml`](../.github/workflows/cd.yml) | `push` na `main` ou **Run workflow** | `production`, **não cancela** — enfileira | Provisiona sob o environment `production` |
+| [`cd.yml`](../.github/workflows/cd.yml) | `push` na `main` ou **Run workflow** (`action`: `apply` padrão ou `destroy`) | `production`, **não cancela** — enfileira | Provisiona (`apply`) ou destrói (`destroy`) sob o environment `production` |
 
 As permissões do `GITHUB_TOKEN` são `contents: read`; a abertura do PR usa o
 token efêmero do GitHub App instalado com permissão para criar Pull Requests.
@@ -101,7 +101,7 @@ Autentica com um **GitHub App token**, no mesmo padrão de `infra-base` e `k8s`.
 
 ## Workflow de CD
 
-Um único job, `terraform-gateway`, sob o environment `production`.
+Um único job, `terraform-gateway`, sob o environment `production`. No disparo manual (`workflow_dispatch`), aceita o input `action` (`apply` por padrão ou `destroy`).
 
 | # | Step no workflow | O que faz |
 | --- | --- | --- |
@@ -110,8 +110,9 @@ Um único job, `terraform-gateway`, sob o environment `production`.
 | 3 | Configure AWS Credentials | Configura access key, secret key e session token da mesma sessão AWS, em us-east-1. |
 | 4 | Terraform Init | Executa `terraform init -no-color -backend-config="bucket=$TF_STATE_BUCKET"`, instalando providers e configurando o backend S3 real. |
 | 5 | Terraform Validate | Executa `terraform validate -no-color`; inconsistência de configuração reprova o job. |
-| 6 | Terraform Plan | Executa `terraform plan -no-color`; consulta providers e states necessários e mostra as alterações. |
-| 7 | Terraform Apply | Executa `terraform apply -auto-approve -no-color`; calcula seu próprio plano, pois não há plano salvo no step anterior. |
+| 6 | Terraform Plan | Executa `terraform plan -no-color` quando `action != 'destroy'`; consulta providers e states necessários e mostra as alterações. |
+| 7 | Terraform Apply | Executa `terraform apply -auto-approve -no-color` quando `action != 'destroy'`; calcula seu próprio plano, pois não há plano salvo no step anterior. |
+| 8 | Terraform Destroy | Executa `terraform destroy -auto-approve -no-color` somente quando disparado via `workflow_dispatch` com `action == 'destroy'`, removendo o HTTP API Gateway, o VPC Link, o stage e o log group e atualizando o state remoto no S3. |
 
 **Três proteções:**
 
