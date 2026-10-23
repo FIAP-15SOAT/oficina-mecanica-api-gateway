@@ -87,7 +87,7 @@ Por isso a verificação externa documentada em [`ci-cd.md`](../ci-cd.md) usa **
 
 ### Sobre o security group do balanceador
 
-O NLB é criado **sem** security group, e um NLB criado sem SG **não pode receber um depois** — só substituindo o balanceador. A decisão fecha essa porta conscientemente: dentro desta VPC, quem poderia alcançar a NodePort diretamente são os próprios nós do EKS (que já falam com o pod por `ClusterIP`), o RDS (que não inicia conexões) e as ENIs do VPC Link. A regra por CIDR da VPC é exatamente o que `oficina-mecanica-infra-database` já faz para o RDS. Substituir um NLB neste laboratório é barato.
+O NLB é criado **sem** security group, e um NLB criado sem SG **não pode receber um depois** — só substituindo o balanceador. A decisão fecha essa porta conscientemente: dentro desta VPC, quem poderia alcançar a NodePort diretamente são os próprios nós do EKS (que já falam com o pod por `ClusterIP`), o RDS (que não inicia conexões) e as ENIs do VPC Link. A regra por CIDR da VPC era usada originalmente em `oficina-mecanica-infra-database-work-order` antes do isolamento por SG dos nós. Substituir um NLB neste laboratório é barato.
 
 ## Consequências
 
