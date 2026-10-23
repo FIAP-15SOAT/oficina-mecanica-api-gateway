@@ -5,6 +5,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to execute"
+        required: false
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
 
 concurrency:
   group: production
@@ -51,9 +60,16 @@ jobs:
         working-directory: terraform
 
       - name: Terraform Plan
+        if: github.event_name != 'workflow_dispatch' || inputs.action != 'destroy'
         run: terraform plan -no-color
         working-directory: terraform
 
       - name: Terraform Apply
+        if: github.event_name != 'workflow_dispatch' || inputs.action != 'destroy'
         run: terraform apply -auto-approve -no-color
+        working-directory: terraform
+
+      - name: Terraform Destroy
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+        run: terraform destroy -auto-approve -no-color
         working-directory: terraform
