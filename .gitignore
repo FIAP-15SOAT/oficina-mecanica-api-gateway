@@ -26,3 +26,6 @@ CLAUDE.md
 !.github/workflows/
 !.github/actions/
 openspec/
+
+# Specs e planos locais do Superpowers
+superpowers/
