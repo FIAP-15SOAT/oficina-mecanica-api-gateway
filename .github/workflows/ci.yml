@@ -87,6 +87,18 @@ jobs:
             --skip-rule=no-empty-servers \
             --skip-rule=operation-operationId
 
+      # The edge never publishes internal or catch-all routes; case-insensitive
+      # because the services route paths case-insensitively.
+      - name: Reject internal and catch-all routes
+        run: |
+          forbidden="$(grep -niE "^  [\"']?(/internal([/\"':]|$)|/(api/)?\{[^}]+\+\}|\\\$default)" openapi/gateway.yaml || true)"
+          if [[ -n "${forbidden}" ]]; then
+            while IFS= read -r line; do
+              echo "::error file=openapi/gateway.yaml,line=${line%%:*}::Forbidden gateway route: ${line#*:}"
+            done <<< "${forbidden}"
+            exit 1
+          fi
+
   open-pr:
     name: Open Pull Request
     runs-on: ubuntu-latest

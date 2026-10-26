@@ -10,34 +10,46 @@ Como uma requisição atravessa o API Gateway até cada backend, quem pode falar
 - [Ordem de aplicação e de rollback](#ordem-de-aplicação-e-de-rollback)
 - [Falhas conhecidas](#falhas-conhecidas)
 
-![Arquitetura do gateway: HTTP API, rotas de login, proxy privado por VPC Link e NLB, Lambda, CloudWatch e states consumidos](diagrams/infrastructure.png)
+![Arquitetura do gateway: HTTP API, rotas por prefixo e por serviço, VPC Link, listeners do NLB por serviço, webhook para o billing, Lambda, CloudWatch e states consumidos](diagrams/infrastructure.png)
 
 ## O caminho de uma requisição
 
-### Até a API no EKS
+### Até um serviço no EKS
 
 ```text
 cliente
   │  HTTPS
   ▼
 API Gateway (HTTP API v2, stage $default)
-  │  casa a rota: exata > gulosa
+  │  casa a rota: exata > gulosa; sem rota = 404 da borda
+  │  escolhe a integração do grupo da rota (dono em route_owner)
   │  aplica throttling da rota
-  │  sobrescreve x-request-id = $context.requestId
-  │  sobrescreve o caminho = $request.path   (remove a porção de stage)
+  │  sobrescreve x-request-id = $context.requestId   (menos no webhook)
+  │  sobrescreve o caminho = $request.path            (remove a porção de stage)
   ▼
 VPC Link V2 — ENIs nas subnets privadas
-  │  TCP :80
+  │  TCP na porta do listener do dono
   ▼
 NLB interno (oficina-mecanica-infra-k8s)
-  │  TCP :30080, SNAT para a ENI do NLB
+  │  listener do serviço → target group do serviço, SNAT para a ENI do NLB
   ▼
-Nó do EKS — NodePort 30080
+Nó do EKS — NodePort do serviço
   ▼
-Service oficina-api → Pod
+Service do serviço → Pod
 ```
 
-A resposta volta pelo mesmo caminho. O Gateway devolve **status, corpo e cabeçalhos de aplicação** produzidos pela API, sem reescrevê-los.
+| Serviço | Listener do NLB | NodePort |
+|---|---|---|
+| work-order | `80` | `30080` |
+| identity | `8081` | `30081` |
+| billing | `8082` | `30082` |
+| inventory | `8083` | `30083` |
+
+O dono de cada rota está na [tabela de donos](openapi.md#tabela-de-donos-das-rotas). A resposta volta pelo mesmo caminho. O Gateway devolve **status, corpo e cabeçalhos de aplicação** produzidos pelo serviço, sem reescrevê-los.
+
+### Webhook do Mercado Pago
+
+`POST /webhooks/mercadopago` vai ao listener `8082` do billing por uma integração própria, que sobrescreve só o caminho: a query string e o `x-request-id` enviados pelo Mercado Pago chegam intactos, porque a assinatura `x-signature` é calculada sobre eles. A autenticação dessa rota é a verificação HMAC feita pelo billing.
 
 ### Até a função serverless de autenticação de clientes
 
@@ -59,8 +71,8 @@ Estas respostas **não** seguem o envelope de erro dos backends — são do API 
 
 | Situação | Resposta |
 |---|---|
-| Caminho não publicado | `404` |
-| Método não publicado no caminho | `404` |
+| Caminho não publicado (inclusive `/internal/...` e prefixo fora da tabela) | `404` |
+| Método não publicado no caminho, sem prefixo guloso acima (por exemplo, `OPTIONS` em `/api/me`) | `404` |
 | Limite de frequência da rota excedido | `429` |
 | Caminho de rede indisponível | `5xx` |
 | Integração sem permissão de invocação | `500` |
@@ -70,13 +82,13 @@ Estas respostas **não** seguem o envelope de erro dos backends — são do API 
 | Salto | Origem | Destino | Autorizado por |
 |---|---|---|---|
 | cliente → API Gateway | internet | endpoint público do Gateway | — (HTTPS, sem TLS mútuo) |
-| API Gateway → NLB | ENIs do VPC Link (subnets privadas) | listener TCP:80 do NLB interno | **egress** de `secgrp-vpclink-oficina-mecanica`, restrito à CIDR da VPC |
-| NLB → nó | ENI do NLB | NodePort `30080` | **ingress** no security group gerenciado do cluster, restrito à CIDR da VPC |
+| API Gateway → NLB | ENIs do VPC Link (subnets privadas) | listeners TCP `80`, `8081`, `8082` e `8083` do NLB interno | **egress** de `secgrp-vpclink-oficina-mecanica`, uma regra por porta de listener, restrito à CIDR da VPC |
+| NLB → nó | ENI do NLB | NodePorts `30080` a `30083` | **ingress** no security group gerenciado do cluster, restrito à CIDR da VPC |
 | nó → pod | kube-proxy | porta do contêiner | rede do cluster |
 
 Dois detalhes com consequência:
 
-- **O security group do VPC Link só tem egress.** Ele inicia conexões e nunca as recebe, então ingress ali seria ruído. O egress é restrito a TCP na porta do listener com destino na CIDR da VPC — não `0.0.0.0/0`.
+- **O security group do VPC Link só tem egress.** Ele inicia conexões e nunca as recebe, então ingress ali seria ruído. O egress tem uma regra por porta de listener (mapa `service_listener_ports` do infra-k8s), só TCP e só para a CIDR da VPC, nunca `0.0.0.0/0`. Um serviço novo publicado no mapa ganha a regra no próximo `apply`, sem porta fixada aqui.
 - **O NLB não tem security group.** Um NLB criado sem SG **não pode receber um depois** — só substituindo o balanceador. A decisão é deliberada e está registrada no [ADR 0003](adr/0003-integracao-privada-com-o-eks.md), com o gatilho que a reabriria.
 
 **Nada nesse caminho tem endereço público.** O balanceador é interno, as ENIs vivem em subnets privadas e a NodePort só aceita a CIDR da VPC. O único endereço alcançável da internet é o do próprio Gateway.
@@ -86,8 +98,10 @@ Dois detalhes com consequência:
 | Peça | Dono | Por quê |
 |---|---|---|
 | VPC, subnets privadas, CIDR | `oficina-mecanica-infra-base` | fundação de rede |
-| NLB interno, target group, listener, vínculo com o ASG, regra da NodePort | `oficina-mecanica-infra-k8s` | depende do **ASG do node group** e do **security group do cluster**, ambos daquele stack |
-| `Service` da API como `NodePort` | `oficina-mecanica-work-order-service` | é manifesto de aplicação |
+| NLB interno, um target group e um listener por serviço, vínculo com o ASG, regras das NodePorts | `oficina-mecanica-infra-k8s` | depende do **ASG do node group** e do **security group do cluster**, ambos daquele stack |
+| `Service` de cada serviço como `NodePort` | repositório de cada serviço (`oficina-mecanica-work-order-service`, `-identity-service`, `-billing-service`, `-inventory-service`) | é manifesto de aplicação |
+| Dono de cada grupo de rotas (`route_owner`), rotas e integrações | **este repositório** | é a superfície pública; cada serviço declara as próprias rotas no Swagger |
+| Verificação da assinatura do webhook | `oficina-mecanica-billing-service` | o Gateway não autentica (ADR 0004) |
 | VPC Link, API, stage, throttling, log de acesso | **este repositório** | é o API Gateway |
 | `aws_lambda_permission` da rota de autenticação | `oficina-mecanica-lambda-customer-auth` | política *resource-based* pertence ao dono do recurso |
 
@@ -95,7 +109,7 @@ A fronteira do balanceador é a que mais gera dúvida, e o motivo é concreto: c
 
 ```text
 infra-base ──▶ database
-           ──▶ k8s ──▶ gateway     (k8s: api_nlb_listener_arn)
+           ──▶ k8s ──▶ gateway     (k8s: service_listener_arns, service_listener_ports)
            ───────────▶ gateway    (infra-base: vpc_id, vpc_cidr, private_subnet_ids)
 ```
 
@@ -107,7 +121,7 @@ Sem ciclos. São **duas** remote states diretas aqui, em vez de fazer `k8s` reex
 1. oficina-mecanica-infra-base             VPC, subnets e NAT
 2. oficina-mecanica-infra-database-work-order  RDS, ElastiCache Valkey e segredos de credenciais
 3. oficina-mecanica-infra-k8s              EKS, NLB e NodePort do caminho privado
-4. oficina-mecanica-work-order-service     migrations + Service NodePort + aplicação
+4. serviços (work-order, identity, billing, inventory)  migrations + Service NodePort + aplicação
 5. oficina-mecanica-api-gateway            HTTP API e VPC Link
 6. oficina-mecanica-lambda-customer-auth   função + segredo de assinatura + permissão
 7. oficina-mecanica-custom-monitoring     dashboards, alertas e Synthetic
@@ -127,7 +141,8 @@ Sem ciclos. São **duas** remote states diretas aqui, em vez de fazer `k8s` reex
 
 Três acoplamentos que essa ordem respeita:
 
-- Reverter o `Service` antes de remover o API Gateway deixa o target group sem destino.
+- Reverter o `Service` de um serviço antes de remover o API Gateway deixa o target group dele sem destino.
+- Um serviço ainda não implantado responde erro de integração nas rotas que apontam para ele; isso não indica falha do Gateway.
 - Remover o caminho privado antes de destruir o Gateway deixa a integração apontando para um listener inexistente.
 - **Recriar a API muda o `api_execution_arn`**, invalidando a `aws_lambda_permission` que vive no repositório da função — ela precisa ser reaplicada.
 
@@ -139,7 +154,7 @@ São falhas **da arquitetura adotada**, não defeitos. Cada uma com sintoma, cau
 
 ### 1. O VPC Link responde `AVAILABLE` antes de estar utilizável
 
-**Sintoma.** Logo após o provisionamento, requisições a `/api/*` respondem `503` com o envelope do API Gateway depois de ~9 s. O log de acesso registra latência de integração de ~9000 ms. Minutos depois, as mesmas requisições respondem `200` em menos de meio segundo, **sem nenhuma mudança de configuração**.
+**Sintoma.** Logo após o provisionamento, requisições aos serviços respondem `503` com o envelope do API Gateway depois de ~9 s. O log de acesso registra latência de integração de ~9000 ms. Minutos depois, as mesmas requisições respondem `200` em menos de meio segundo, **sem nenhuma mudança de configuração**.
 
 **Causa.** O `VpcLinkStatus` vai para `AVAILABLE` — e a mensagem diz literalmente *"VPC link is ready to route traffic"* — antes de o plano de dados estar de fato pronto. Durante essa janela o tráfego não chega ao balanceador: as métricas do NLB mostram `NewFlowCount` e `ProcessedBytes` **zerados**.
 
@@ -155,7 +170,7 @@ Zero fluxos com o alvo `healthy` e o VPC Link `AVAILABLE` pode indicar propagaç
 
 ### 2. O VPC Link fica `INACTIVE` após 60 dias sem tráfego
 
-**Sintoma.** Após um período longo de ociosidade, as requisições a `/api/*` falham com `5xx` do API Gateway.
+**Sintoma.** Após um período longo de ociosidade, as requisições aos serviços falham com `5xx` do API Gateway.
 
 **Causa.** A AWS coloca o VPC Link em `INACTIVE` e remove as ENIs quando ele fica 60 dias sem tráfego. A reativação é automática no primeiro uso, mas leva alguns minutos. Num laboratório intermitente, isso acontece.
 
@@ -166,19 +181,19 @@ aws apigatewayv2 get-vpc-link --vpc-link-id "$(terraform output -raw vpc_link_id
   --query '[VpcLinkStatus,VpcLinkStatusMessage]'
 ```
 
-### 3. Fail-open do balanceador com um único nó
+### 3. Fail-open do balanceador
 
-**Sintoma.** Com o banco fora do ar, `/api/health/live` responde `200` e `/api/health/ready` responde `503` — **os dois vindos da aplicação**, não do API Gateway.
+**Sintoma.** Com o banco de um serviço fora do ar, `/api/health/live` responde `200` e `GET /health/<contexto>` responde `503`, **os dois vindos do serviço**, não do API Gateway.
 
-**Causa.** O NLB **falha aberto**: se nenhum alvo estiver saudável — ou o target group estiver vazio —, ele volta a encaminhar para todos, independentemente da saúde deles. Com `desired = min = max = 1`, esse é o caso comum, não a exceção. O health check não protege quando só existe um destino.
+**Causa.** O NLB **falha aberto**: se nenhum alvo de um target group estiver saudável, ele volta a encaminhar para todos, independentemente da saúde deles. Os alvos são os dois nós do cluster (modo `instance`), e o health check de cada target group consulta a prontidão do mesmo serviço pelos dois nós: quando o serviço não está pronto, os dois nós ficam não saudáveis juntos e o tráfego segue mesmo assim. O health check não protege um serviço que está indisponível em todas as réplicas.
 
-| Situação | `/api/health/live` | `/api/health/ready` | Quem responde |
+| Situação | `/api/health/live` | `/api/health/ready` ou `GET /health/<contexto>` | Quem responde |
 |---|---|---|---|
-| Aplicação saudável | `200` | `200` | aplicação |
-| Banco fora do ar | `200` | `503` | **aplicação** |
+| Serviço saudável | `200` | `200` | serviço |
+| Banco do serviço fora do ar | `200` | `503` | **serviço** |
 | Caminho de rede indisponível | `5xx` | `5xx` | **API Gateway** |
 
-**Verificação.** É a diferença entre as duas primeiras linhas que importa: se `/live` responde `200` e `/ready` responde `503`, o caminho de rede está bom e o problema é a aplicação ou o banco. Por isso **toda verificação externa desta solução usa prontidão, não vivacidade** — `/live` daria sucesso com a solução inutilizável.
+**Verificação.** É a diferença entre as duas primeiras linhas que importa: se `/live` responde `200` e `/ready` responde `503`, o caminho de rede está bom e o problema é o serviço ou o banco dele. Por isso **toda verificação externa desta solução usa prontidão, não vivacidade** — `/live` daria sucesso com a solução inutilizável.
 
 ### 4. Token de sessão do laboratório expirado
 
@@ -200,11 +215,12 @@ Os seguintes resultados orientam o diagnóstico. A inspeção do recurso provisi
 
 | Comportamento | Observação |
 |---|---|
-| Porção de stage no caminho | A aplicação recebe `url.path = /api/customers`, **sem** porção de stage — o mapeamento `overwrite:path` cumpre o papel |
-| Endereço de origem na aplicação | `client.address` é a ENI do NLB (`::ffff:10.0.10.x`), **não** o cliente. Ver [observability.md](observability.md) |
-| Parameter mappings no recurso | `overwrite:path` somente em `eks`; `overwrite:header.x-request-id` declarado em `eks` e `lambda`. Conferir com `aws apigatewayv2 get-integrations` |
-| Rota protegida sem credencial | `401` produzido **pela API**, com o envelope dela |
-| Caminho não publicado | `404` produzido **pelo API Gateway** |
+| Porção de stage no caminho | O serviço recebe `url.path = /api/customers`, **sem** porção de stage — o mapeamento `overwrite:path` cumpre o papel |
+| Endereço de origem no serviço | `client.address` é a ENI do NLB (`::ffff:10.0.10.x`), **não** o cliente. Ver [observability.md](observability.md) |
+| Parameter mappings no recurso | `overwrite:path` em todas as integrações de serviço; `overwrite:header.x-request-id` em todas, menos `webhook-billing`. Conferir com `aws apigatewayv2 get-integrations` |
+| Rota protegida sem credencial | `401` produzido **pelo serviço dono**, com o envelope dele |
+| Caminho não publicado, inclusive `/internal/...` | `404` produzido **pelo API Gateway** |
+| `GET /health/<contexto>` de serviço não implantado | `5xx` com `integrationError` no log de acesso, por desenho |
 | `POST /customer-auth/login` com credencial inexistente | `401` produzido **pela função serverless**, com o envelope dela. A rota não declara autorizador próprio, então o `401` só pode ter vindo dela |
 | `POST /customer-auth/login` sem a `aws_lambda_permission` aplicada | `500` com `integrationError` sobre permissão. O conserto é reaplicar a stack da função — não reverter esta |
 
@@ -214,4 +230,5 @@ Os seguintes resultados orientam o diagnóstico. A inspeção do recurso provisi
 - 🔒 [Segurança](security.md) — postura do API Gateway e riscos aceitos.
 - 📊 [Observabilidade](observability.md) — log de acesso, correlação e métricas.
 - 📐 [ADR 0003](adr/0003-integracao-privada-com-o-eks.md) — por que o balanceador não está aqui, e as alternativas descartadas.
+- 📐 [ADR 0005](adr/0005-integracao-privada-por-servico-e-tabela-de-donos.md) — integração por serviço e tabela de donos.
 - ☸️ [`oficina-mecanica-work-order-service` › Infra · Visão Geral](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/infra/overview.md) — a solução inteira como sistema.

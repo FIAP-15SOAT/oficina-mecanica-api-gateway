@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceito — 2026-09-07
+Substituído pelo [ADR 0005](0005-integracao-privada-por-servico-e-tabela-de-donos.md) em 2026-10-25 (aceito em 2026-09-07). O caminho de rede descrito aqui continua o mesmo; o roteamento passou a ser por serviço, com um listener por serviço no NLB e a tabela `route_owner`. O fail-open descrito abaixo continua valendo com os dois nós atuais: os alvos de cada target group são os nós, e o health check consulta a prontidão do mesmo serviço em todos eles.
 
 Depende do [ADR 0001](0001-http-api-em-vez-de-rest-api.md): VPC Link **V2** é o mecanismo de integração privada das HTTP APIs.
 

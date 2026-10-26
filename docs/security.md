@@ -22,11 +22,13 @@ O que **não** muda: o cluster continua sem exposição direta. O balanceador é
 | Controle | Como |
 |---|---|
 | Backend privado | NLB **interno** e ENIs do VPC Link em subnets privadas; nenhum recurso do cluster recebe IP público |
-| Egress do VPC Link restrito | TCP na porta do listener, destino na **CIDR da VPC** — não `0.0.0.0/0`. Sem regra de ingress: o VPC Link inicia conexões, nunca as recebe |
+| Egress do VPC Link restrito | TCP só nas portas dos listeners dos serviços (`80`, `8081`, `8082`, `8083`), destino na **CIDR da VPC**, nunca `0.0.0.0/0`. Sem regra de ingress: o VPC Link inicia conexões, nunca as recebe |
 | Ingress do nó restrito | A NodePort só aceita a **CIDR da VPC**; a porta não é alcançável da internet nem que alguém descubra o IP de um nó |
-| Superfície mínima | Três rotas publicadas. Qualquer outro caminho recebe `404` **do API Gateway**, sem alcançar backend |
-| Método restrito por rota | `POST /customer-auth/login` publica apenas `POST`; outro método no mesmo caminho recebe `404` do API Gateway |
-| Limitação de frequência | `50/100` req/s padrão no stage; `5/10` nas duas rotas de login |
+| Superfície declarada | Só os prefixos, as rotas exatas e as rotas por serviço da [tabela de donos](openapi.md#tabela-de-donos-das-rotas). Qualquer outro caminho recebe `404` **do API Gateway**, sem alcançar backend |
+| Sem catch-all e sem rota interna | Não há `/api/{proxy+}`, rota gulosa na raiz nem `$default`, e nenhum caminho `/internal` é publicado: `GET /internal/...` pela internet recebe `404` da borda. A guarda do CI reprova o PR que tentar publicar um deles |
+| Webhook autenticado no billing | `POST /webhooks/mercadopago` não tem credencial de usuário; o billing verifica a assinatura HMAC `x-signature` do Mercado Pago. Por isso a borda preserva a query string e o `x-request-id` dessa rota |
+| Método restrito por rota | `POST /customer-auth/login`, `POST /webhooks/mercadopago` e as rotas exatas publicam só o método declarado; outro método no mesmo caminho recebe `404` do API Gateway, ou segue a rota do prefixo pai nas rotas exatas aninhadas |
+| Limitação de frequência | `50/100` req/s padrão no stage; `5/10` nas duas rotas de login; `10/20` no webhook |
 | Permissão de invocação escopada | O `aws_lambda_permission` autoriza **apenas** a rota `POST /customer-auth/login` desta API — não "qualquer rota", não "qualquer API" |
 | Log sem dado sensível | Sem corpo, sem query string, sem URL crua e sem cabeçalho de autorização. Corpos e cabeçalhos de credencial são excluídos do formato; `integrationError` é diagnóstico produzido pela AWS, não texto sanitizado pela aplicação |
 | Retenção finita | 14 dias, alinhada à retenção dos logs de plataforma do projeto |
@@ -34,15 +36,15 @@ O que **não** muda: o cluster continua sem exposição direta. O balanceador é
 
 ## Riscos aceitos e registrados
 
-### 1. `/api/docs`, `/api/docs-json` e os endpoints de health passam a ser públicos
+### 1. Documentação e saúde dos serviços são públicas
 
-**O risco.** A documentação da API — incluindo a lista completa de endpoints e schemas — fica acessível a qualquer um. Os endpoints de saúde também.
+**O risco.** A documentação de cada serviço (`/api/docs`, `/api/docs-json` e `GET /docs/<contexto>`), incluindo a lista completa de endpoints e schemas, fica acessível a qualquer um. Os endpoints de saúde (`/api/health/*` e `GET /health/<contexto>`) também.
 
 **Por que foi aceito.** Caráter acadêmico e demonstrativo do projeto: a documentação pública é parte do que se quer mostrar.
 
 **O que não se pode dizer é que não havia alternativa.** Existem duas, e nenhuma foi escolhida:
 
-1. Publicar `GET /api/docs` e `/api/docs-json` como rotas exatas no Gateway exigindo `AWS_IAM` — a precedência (exata > gulosa) faria elas prevalecerem sobre o proxy.
+1. Exigir `AWS_IAM` nas rotas de documentação do Gateway, que já são rotas próprias.
 2. Não montar o Swagger em produção na aplicação (hoje o `main.ts` passa `withSwagger: true` fixo).
 
 Os corpos dos endpoints de saúde são constantes e não revelam estado interno.
@@ -67,7 +69,7 @@ Os corpos dos endpoints de saúde são constantes e não revelam estado interno.
 
 ### 4. A API aplica autorização por controller, não por guard global
 
-**O risco.** Hoje todos os controllers de negócio declaram `@UseGuards`, e `auth` e `health` são exceções deliberadas — **não há buraco atual**. O que este API Gateway muda é o **custo de um esquecimento futuro**: com `ANY /api/{proxy+}`, um controller novo sem `@UseGuards` fica público na internet **sem passar por este repositório**.
+**O risco.** Hoje todos os controllers de negócio declaram `@UseGuards`, e `auth` e `health` são exceções deliberadas — **não há buraco atual**. O que este API Gateway muda é o **custo de um esquecimento futuro**: um controller novo sob um prefixo publicado, sem `@UseGuards`, fica público na internet **sem passar por este repositório**. Um prefixo novo, ao contrário, precisa de PR aqui.
 
 **Onde a correção pertence.** Ao repositório da API — registrar `JwtAuthGuard` como `APP_GUARD` (o `@Public()` e o lookup por reflector já existem), ou um teste de política de rotas com allowlist. **Não** a um autorizador no API Gateway, que o [ADR 0004](adr/0004-autenticacao-permanece-nos-backends.md) descarta por impossibilidade técnica.
 
@@ -92,9 +94,9 @@ da integração privada; o protocolo até os targets também precisaria ser revi
 
 **Não é risco — é a ausência de um controle que não se aplica.** CORS é aplicado pelo navegador, e foi confirmado que não haverá consumidor de navegador. Sem origem cross-origin, configurá-lo seria declarar um consumidor que não existe.
 
-Consequência prática: o preflight `OPTIONS` em `/api/*` cai na rota de proxy e é respondido pela própria API, que já faz `enableCors` com `exposedHeaders: ['x-request-id']`. Em `/customer-auth/login` não há rota `OPTIONS`, então um preflight ali devolve `404`.
+Consequência prática: o preflight `OPTIONS` num prefixo cai na rota `ANY` do prefixo e é respondido pelo serviço dono, que já faz `enableCors` com `exposedHeaders: ['x-request-id']`. Nas rotas exatas aninhadas (`/api/users/{userId}/customers`, `/api/work-orders/{id}/quotes`, `/api/services/{id}/metrics`), o preflight segue a rota do prefixo pai. Nas rotas exatas sem prefixo guloso acima, no webhook, nas rotas de saúde e de documentação por serviço e em `/customer-auth/login` não há rota `OPTIONS`, então um preflight ali devolve `404`.
 
-**Se voltar a ser necessário:** `cors_configuration` no `aws_apigatewayv2_api` — **nunca** no YAML, que o provider apaga —, com origens explícitas, `allow_credentials` coerente e `expose_headers = ["x-request-id"]`. Sem isso o API Gateway apagaria o cabeçalho que a API expõe de propósito.
+**Se voltar a ser necessário:** `cors_configuration` no `aws_apigatewayv2_api` — **nunca** no YAML, que o provider apaga —, com origens explícitas, `allow_credentials` coerente e `expose_headers = ["x-request-id"]`. Sem isso o API Gateway apagaria o cabeçalho que os serviços expõem de propósito.
 
 ## Evolução futura
 

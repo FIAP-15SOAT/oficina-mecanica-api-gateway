@@ -51,10 +51,12 @@ Sem Terraform Cloud e sem tabela DynamoDB de lock — nenhum repositório do pro
 
 ```hcl
 data "terraform_remote_state" "aws_base" { ... }   # vpc_id, vpc_cidr, private_subnet_ids
-data "terraform_remote_state" "k8s"      { ... }   # api_nlb_listener_arn
+data "terraform_remote_state" "k8s"      { ... }   # service_listener_arns, service_listener_ports
 ```
 
 São **duas remote states diretas**, e não uma cadeia através de `k8s` — fazer o stack de Kubernetes reexportar os outputs de rede o tornaria um intermediário opaco.
+
+Os dois mapas do `k8s` são indexados por contexto (`work-order`, `identity`, `billing`, `inventory`): `service_listener_arns` alimenta o `uri` das integrações e `service_listener_ports` gera uma regra de egress por porta. Um contexto novo publicado pelo `k8s` ganha a regra de egress sem mudança aqui e pode virar dono de um grupo trocando só o `route_owner`; as rotas `/health/<contexto>` e `/docs/<contexto>` dele são acrescentadas no contrato.
 
 Os valores são lidos **sem tratamento que os torne opcionais**: se um contrato não existir, o `plan` falha nomeando o atributo ausente, antes de criar qualquer recurso. A ordem de aplicação entre repositórios está em [architecture.md](architecture.md#ordem-de-aplicação-e-de-rollback).
 
@@ -62,18 +64,28 @@ Os valores são lidos **sem tratamento que os torne opcionais**: se um contrato 
 
 | Recurso | Arquivo | Finalidade |
 |---|---|---|
-| `aws_security_group.secgrp_vpclink` | `security_groups.tf` | ENIs do VPC Link. **Só egress**, TCP na porta do listener com destino na CIDR da VPC. Ingress seria ruído: o VPC Link inicia conexões, nunca as recebe |
+| `aws_security_group.secgrp_vpclink` | `security_groups.tf` | ENIs do VPC Link. **Só egress**; sem regra inline. Ingress seria ruído: o VPC Link inicia conexões, nunca as recebe |
+| `aws_vpc_security_group_egress_rule.vpclink_to_service_listener` | `security_groups.tf` | Uma regra por chave de `service_listener_ports`: TCP na porta do listener do serviço, com destino na CIDR da VPC |
 | `aws_apigatewayv2_vpc_link.vpclink` | `api_gateway.tf` | Cria as ENIs nas subnets privadas. **Imutável**: subnets e security groups não podem ser alterados depois — mudá-los substitui o recurso |
-| `aws_apigatewayv2_api.api` | `api_gateway.tf` | A HTTP API. `body` renderizado de `openapi/gateway.yaml` por `templatefile()`, com `fail_on_warnings = true` |
+| `aws_apigatewayv2_api.api` | `api_gateway.tf` | A HTTP API. `body` renderizado de `openapi/gateway.yaml` por `templatefile()` com `service_listener_arns` e `route_owner`, e `fail_on_warnings = true` |
 | `aws_apigatewayv2_stage.default` | `api_gateway.tf` | Stage `$default` com `auto_deploy`, throttling, métricas e log de acesso |
 | `aws_cloudwatch_log_group.cw_lg_api_access` | `cloudwatch.tf` | Log de acesso do API Gateway, retenção alinhada à do log group do control plane do EKS |
 
 **Não existem** `aws_apigatewayv2_route` nem `aws_apigatewayv2_integration` avulsos: eles conflitariam com o `body`. Rotas e integrações vêm do documento OpenAPI — ver [openapi.md](openapi.md).
 
+## Tabela `route_owner`
+
+`terraform/locals.tf` declara `route_owner`, o mapa de grupo de rotas para o serviço dono. Cada integração de grupo do documento OpenAPI usa `uri: '${service_listener_arns[route_owner["<grupo>"]]}'`, então:
+
+- trocar o dono de um grupo é trocar uma entrada do mapa, e o `plan` mostra só as integrações daquele grupo mudando;
+- uma chave usada no documento e ausente no mapa, ou um dono que não é chave de `service_listener_arns`, quebra o `templatefile` no `plan` com `Invalid index`, antes de publicar.
+
+Os grupos, os donos atuais e o passo a passo da virada estão em [openapi.md](openapi.md#tabela-de-donos-das-rotas).
+
 **Três detalhes com motivo**, que ficam obscuros sem explicação:
 
 - **`fail_on_warnings = true`** — sem ela, uma integração com URI inválida produz uma **rota criada sem target** e um `apply` verde. É a diferença entre falha visível e superfície parcial publicada em silêncio.
-- **`detailed_metrics_enabled` repetido em cada bloco `route_settings`** — o provider envia `false` para todo campo omitido dentro do bloco, o que desligaria as métricas exatamente nas duas rotas de login.
+- **`detailed_metrics_enabled` repetido em cada bloco `route_settings`** — o provider envia `false` para todo campo omitido dentro do bloco, o que desligaria as métricas exatamente nas rotas de login e no webhook.
 - **Sem `cors_configuration`** — deliberado, e não pode ser suprido pelo YAML: com `body` definido e o bloco ausente no HCL, o provider chama `DeleteCorsConfiguration` logo após o import, e o `apply` termina verde com o CORS apagado.
 
 ## Variáveis de entrada
@@ -88,15 +100,16 @@ Todas têm default, exceto `aws_base_state_bucket` e `k8s_state_bucket`: os work
 | `aws_base_state_bucket` | `string` | — | Bucket do state de `infra-base`; os workflows a preenchem com `TF_STATE_BUCKET` | Localiza o bucket da rede consumida pelo VPC Link e SG. |
 | `aws_base_state_key` | `string` | `infra/prod-simulated/infra-base/terraform.tfstate` | Chave do state de `infra-base` | Seleciona o objeto que publica VPC, CIDR e subnets privadas. |
 | `aws_base_state_region` | `string` | `us-east-1` | Região do bucket de `infra-base` | Define a região usada na leitura do state de rede. |
-| `k8s_state_bucket` | `string` | — | Bucket do state de `k8s`; os workflows a preenchem com `TF_STATE_BUCKET` | Localiza o bucket da plataforma que fornece o listener privado. |
-| `k8s_state_key` | `string` | `infra/prod-simulated/infra-k8s/terraform.tfstate` | Chave do state de `k8s` | Seleciona o objeto que publica `api_nlb_listener_arn`. |
+| `k8s_state_bucket` | `string` | — | Bucket do state de `k8s`; os workflows a preenchem com `TF_STATE_BUCKET` | Localiza o bucket da plataforma que fornece os listeners privados. |
+| `k8s_state_key` | `string` | `infra/prod-simulated/infra-k8s/terraform.tfstate` | Chave do state de `k8s` | Seleciona o objeto que publica `service_listener_arns` e `service_listener_ports`. |
 | `k8s_state_region` | `string` | `us-east-1` | Região do bucket de `k8s` | Define a região da leitura do state Kubernetes. |
-| `nlb_listener_port` | `number` | `80` | Porta do listener do NLB interno; único destino do egress do SG do VPC Link. Precisa casar com o `aws_lb_listener` em `oficina-mecanica-infra-k8s` | Restringe o egress do SG; não altera a porta do listener criado na stack Kubernetes. |
 | `customer_auth_function_name` | `string` | `lbd-oficina-mecanica-customer-auth` | Nome da função serverless; compõe o URI de invocação | Monta o URI Lambda sem ler seu state; deve coincidir com `function_name` da Lambda. |
 | `stage_throttling_rate_limit` | `number` | `50` | Requisições por segundo do throttling padrão do stage | Aplica o alvo padrão de req/s às rotas sem override. |
 | `stage_throttling_burst_limit` | `number` | `100` | Rajada do throttling padrão | Define a capacidade de rajada padrão do stage. |
 | `login_throttling_rate_limit` | `number` | `5` | Requisições por segundo das duas rotas de login | Sobrescreve o alvo de req/s nas duas rotas de login. |
 | `login_throttling_burst_limit` | `number` | `10` | Rajada das rotas de login | Sobrescreve a capacidade de rajada das duas rotas de login. |
+| `webhook_throttling_rate_limit` | `number` | `10` | Requisições por segundo da rota `POST /webhooks/mercadopago` | Sobrescreve o alvo de req/s do webhook do Mercado Pago. |
+| `webhook_throttling_burst_limit` | `number` | `20` | Rajada da rota do webhook | Sobrescreve a capacidade de rajada do webhook do Mercado Pago. |
 | `access_log_retention_in_days` | `number` | `14` | Retenção do log de acesso | Controla a exclusão automática dos access logs no CloudWatch. |
 
 > Os limites de frequência são **alvos agregados por rota**, aplicados com melhor esforço — não cotas por cliente. Ver [security.md](security.md).

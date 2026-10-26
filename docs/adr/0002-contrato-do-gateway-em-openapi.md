@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceito — 2026-09-08
+Aceito — 2026-09-08. Revisado em 2026-10-25 pelo [ADR 0005](0005-integracao-privada-por-servico-e-tabela-de-donos.md): fim do catch-all e tabela de donos (seção [Revisão: rotas por dono e fim do catch-all](#revisão-rotas-por-dono-e-fim-do-catch-all)).
 
 Depende do [ADR 0001](0001-http-api-em-vez-de-rest-api.md): a modalidade HTTP API é o que torna schemas irrelevantes no import e o que habilita `components.x-amazon-apigateway-integrations`.
 
@@ -60,6 +60,17 @@ Duas configurações de API Gateway vivem obrigatoriamente no HCL:
 **Um arquivo**, com as duas integrações em `components.x-amazon-apigateway-integrations` referenciadas por `$ref` — construção suportada **apenas** em HTTP APIs. Duas integrações servem três rotas, e os parameter mappings ficam declarados uma vez só.
 
 **Gatilho para dividir:** 3 ou mais backends **e** blocos de rota passando de ~50 linhas cada. Não antes.
+
+### Revisão: rotas por dono e fim do catch-all
+
+Com quatro serviços, a regra "uma rota sai do proxy quando o Gateway tem algo específico a dizer" deixou de valer: **toda** rota pública passa a ter algo específico, o serviço dono. Desde o [ADR 0005](0005-integracao-privada-por-servico-e-tabela-de-donos.md):
+
+- O catch-all `ANY /api/{proxy+}` saiu. Cada recurso é publicado por prefixo (`ANY /api/<recurso>` e `ANY /api/<recurso>/{proxy+}`), e rotas aninhadas de outro dono viram rotas exatas. Caminho fora delas recebe `404` da borda.
+- O dono de cada grupo de rotas vem da tabela `route_owner` (`terraform/locals.tf`), passada ao `templatefile`. Cada grupo tem uma integração própria com `uri` derivado da tabela, e as rotas a referenciam por `$ref` fixo, para que o lint continue resolvendo os `$ref` no documento cru.
+- O CI ganhou uma guarda que reprova `/internal`, `/api/{proxy+}` e `/{proxy+}` no documento.
+- O gatilho "dividir o arquivo com 3 ou mais backends" foi reavaliado: os blocos por grupo só diferem no destino, então o arquivo segue único.
+
+Continua valendo o resto: o documento declara rotas, integrações e parameter mappings, sem schemas; um endpoint novo **sob um prefixo publicado** fica acessível sem PR aqui, e um prefixo novo exige uma entrada na tabela e as duas rotas.
 
 ## Alternativas consideradas e descartadas
 
