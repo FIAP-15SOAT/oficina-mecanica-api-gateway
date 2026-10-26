@@ -39,7 +39,7 @@ variable "k8s_state_bucket" {
 }
 
 variable "k8s_state_key" {
-  description = "S3 object key for the Kubernetes platform Terraform state (source of api_nlb_listener_arn)"
+  description = "S3 object key for the Kubernetes platform Terraform state (source of service_listener_arns and service_listener_ports)"
   type        = string
   default     = "infra/prod-simulated/infra-k8s/terraform.tfstate"
 }
@@ -48,12 +48,6 @@ variable "k8s_state_region" {
   description = "AWS region where the Kubernetes platform Terraform state bucket is hosted"
   type        = string
   default     = "us-east-1"
-}
-
-variable "nlb_listener_port" {
-  description = "TCP port of the internal NLB listener provisioned in `oficina-mecanica-infra-k8s`"
-  type        = number
-  default     = 80
 }
 
 variable "customer_auth_function_name" {
@@ -84,6 +78,18 @@ variable "login_throttling_burst_limit" {
   description = "Burst capacity of the throttling for the two login routes"
   type        = number
   default     = 10
+}
+
+variable "webhook_throttling_rate_limit" {
+  description = "Target requests per second for the payment provider webhook route"
+  type        = number
+  default     = 10
+}
+
+variable "webhook_throttling_burst_limit" {
+  description = "Burst capacity of the throttling for the payment provider webhook route"
+  type        = number
+  default     = 20
 }
 
 variable "access_log_retention_in_days" {

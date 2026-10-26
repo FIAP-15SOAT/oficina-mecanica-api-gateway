@@ -16,7 +16,8 @@ resource "aws_apigatewayv2_api" "api" {
   body = templatefile("${path.module}/../openapi/gateway.yaml", {
     api_name                      = local.api_name
     vpc_link_id                   = aws_apigatewayv2_vpc_link.vpclink.id
-    nlb_listener_arn              = local.api_nlb_listener_arn
+    service_listener_arns         = local.service_listener_arns
+    route_owner                   = local.route_owner
     customer_auth_integration_uri = local.customer_auth_integration_uri
   })
 
@@ -49,6 +50,13 @@ resource "aws_apigatewayv2_stage" "default" {
     route_key                = "POST /api/auth/login"
     throttling_rate_limit    = var.login_throttling_rate_limit
     throttling_burst_limit   = var.login_throttling_burst_limit
+    detailed_metrics_enabled = true
+  }
+
+  route_settings {
+    route_key                = "POST /webhooks/mercadopago"
+    throttling_rate_limit    = var.webhook_throttling_rate_limit
+    throttling_burst_limit   = var.webhook_throttling_burst_limit
     detailed_metrics_enabled = true
   }
 

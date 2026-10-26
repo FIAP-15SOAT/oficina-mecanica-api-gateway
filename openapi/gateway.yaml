@@ -5,6 +5,8 @@ info:
   description: API Gateway da solução Oficina Mecanica.
   version: "1.0.0"
 
+# Each route group uses the integration of the same name, which targets the
+# group's owner in `route_owner`. There is no catch-all and no /internal path.
 paths:
   /customer-auth/login:
     post:
@@ -19,45 +21,814 @@ paths:
   /api/auth/login:
     post:
       summary: Autenticação de usuários internos
-      description: Gere um access token e um refresh token para usuários internos (funcionários)
+      description: >-
+        Gera um access token e um refresh token para usuários internos (funcionários). Rota própria para o limite de frequência de login.
       responses:
         default:
-          description: Resposta produzida pela API, encaminhada sem alteração.
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
       x-amazon-apigateway-integration:
-        $ref: "#/components/x-amazon-apigateway-integrations/eks"
+        $ref: "#/components/x-amazon-apigateway-integrations/auth"
 
-  /api/{proxy+}:
+  /api/auth/{proxy+}:
     x-amazon-apigateway-any-method:
-      summary: Proxy para os endpoints da API
-      description: >-
-        Encaminha qualquer método e qualquer caminho sob /api para a API no
-        EKS, pela integracao privada.
+      summary: Autenticação de usuários internos (demais operações)
       parameters:
         - name: proxy
           in: path
           required: true
-          description: Restante do caminho, encaminhado a aplicação.
+          description: Restante do caminho, encaminhado ao serviço dono.
           schema:
             type: string
       responses:
         default:
-          description: Resposta produzida pela API, encaminhada sem alteração.
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
       x-amazon-apigateway-integration:
-        $ref: "#/components/x-amazon-apigateway-integrations/eks"
+        $ref: "#/components/x-amazon-apigateway-integrations/auth"
+
+  /api/users:
+    x-amazon-apigateway-any-method:
+      summary: Usuários internos
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/users"
+
+  /api/users/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Usuários internos (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/users"
+
+  /api/users/{userId}/customers:
+    get:
+      summary: Clientes vinculados a um usuário
+      description: >-
+        Rota exata: o dono pode diferir do dono do prefixo `users`; os demais métodos seguem a rota do prefixo.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: Identificador do usuário.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/users-customers"
+
+  /api/me:
+    get:
+      summary: Perfil do cliente autenticado
+      description: >-
+        Rota exata: só o GET é publicado em `/api/me`.
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/me"
+
+  /api/me/password:
+    patch:
+      summary: Troca de senha do cliente autenticado
+      description: >-
+        Rota exata: só o PATCH é publicado em `/api/me/password`.
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/me-password"
+
+  /api/me/work-orders:
+    x-amazon-apigateway-any-method:
+      summary: Ordens de serviço do cliente autenticado
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/me-area"
+
+  /api/me/work-orders/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Ordens de serviço do cliente autenticado (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/me-area"
+
+  /api/me/quotes/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Orçamentos do cliente autenticado
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/me-area"
+
+  /api/customers:
+    x-amazon-apigateway-any-method:
+      summary: Clientes
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/customers"
+
+  /api/customers/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Clientes (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/customers"
+
+  /api/vehicles:
+    x-amazon-apigateway-any-method:
+      summary: Veículos
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/vehicles"
+
+  /api/vehicles/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Veículos (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/vehicles"
+
+  /api/work-orders:
+    x-amazon-apigateway-any-method:
+      summary: Ordens de serviço
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-orders"
+
+  /api/work-orders/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Ordens de serviço (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-orders"
+
+  /api/work-orders/{id}/quotes:
+    get:
+      summary: Orçamentos de uma ordem de serviço
+      description: >-
+        Rota exata: o dono pode diferir do dono do prefixo `work-orders`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador da ordem de serviço.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-orders-quotes"
+
+  /api/services:
+    x-amazon-apigateway-any-method:
+      summary: Serviços do catálogo
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/services"
+
+  /api/services/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Serviços do catálogo (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/services"
+
+  /api/services/{id}/metrics:
+    get:
+      summary: Métricas de execução de um serviço
+      description: >-
+        Rota exata: o dono pode diferir do dono do prefixo `services`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador do serviço.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/services-metrics"
+
+  /api/services-metrics:
+    get:
+      summary: Métricas de execução dos serviços
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/services-metrics"
+
+  /api/parts-supplies:
+    x-amazon-apigateway-any-method:
+      summary: Peças e insumos
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/parts-supplies"
+
+  /api/parts-supplies/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Peças e insumos (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/parts-supplies"
+
+  /api/stock-movements:
+    get:
+      summary: Movimentações de estoque
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/stock"
+
+  /api/stock-reservations:
+    get:
+      summary: Reservas de estoque
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/stock"
+
+  /api/quotes:
+    x-amazon-apigateway-any-method:
+      summary: Orçamentos
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/quotes"
+
+  /api/quotes/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Orçamentos (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/quotes"
+
+  /api/payments:
+    x-amazon-apigateway-any-method:
+      summary: Cobranças
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/payments"
+
+  /api/payments/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Cobranças (subcaminhos)
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao serviço dono.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo serviço dono, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/payments"
+
+  /api/health/live:
+    get:
+      summary: Vivacidade do work-order
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-order"
+
+  /api/health/ready:
+    get:
+      summary: Prontidão do work-order
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-order"
+
+  /api/docs:
+    x-amazon-apigateway-any-method:
+      summary: Swagger UI do work-order
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-order"
+
+  /api/docs/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Arquivos do Swagger UI do work-order
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          description: Restante do caminho, encaminhado ao work-order.
+          schema:
+            type: string
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-order"
+
+  /api/docs-json:
+    get:
+      summary: Documento OpenAPI do work-order
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/work-order"
+
+  /health/work-order:
+    get:
+      summary: Prontidão do work-order
+      description: >-
+        Encaminha para `/api/health/ready` do work-order.
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/health-work-order"
+
+  /health/identity:
+    get:
+      summary: Prontidão do identity
+      description: >-
+        Encaminha para `/api/health/ready` do identity.
+      responses:
+        default:
+          description: Resposta produzida pelo identity, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/health-identity"
+
+  /health/billing:
+    get:
+      summary: Prontidão do billing
+      description: >-
+        Encaminha para `/api/health/ready` do billing.
+      responses:
+        default:
+          description: Resposta produzida pelo billing, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/health-billing"
+
+  /health/inventory:
+    get:
+      summary: Prontidão do inventory
+      description: >-
+        Encaminha para `/api/health/ready` do inventory.
+      responses:
+        default:
+          description: Resposta produzida pelo inventory, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/health-inventory"
+
+  /docs/work-order:
+    get:
+      summary: Documento OpenAPI do work-order
+      description: >-
+        Encaminha para `/api/docs-json` do work-order.
+      responses:
+        default:
+          description: Resposta produzida pelo work-order, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/docs-work-order"
+
+  /docs/identity:
+    get:
+      summary: Documento OpenAPI do identity
+      description: >-
+        Encaminha para `/api/docs-json` do identity.
+      responses:
+        default:
+          description: Resposta produzida pelo identity, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/docs-identity"
+
+  /docs/billing:
+    get:
+      summary: Documento OpenAPI do billing
+      description: >-
+        Encaminha para `/api/docs-json` do billing.
+      responses:
+        default:
+          description: Resposta produzida pelo billing, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/docs-billing"
+
+  /docs/inventory:
+    get:
+      summary: Documento OpenAPI do inventory
+      description: >-
+        Encaminha para `/api/docs-json` do inventory.
+      responses:
+        default:
+          description: Resposta produzida pelo inventory, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/docs-inventory"
+
+  /webhooks/mercadopago:
+    post:
+      summary: Notificações do Mercado Pago
+      description: >-
+        Integração própria: preserva a query string e o `x-request-id` recebidos, que entram na assinatura `x-signature` verificada pelo billing.
+      responses:
+        default:
+          description: Resposta produzida pelo billing, encaminhada sem alteração.
+      x-amazon-apigateway-integration:
+        $ref: "#/components/x-amazon-apigateway-integrations/webhook-billing"
+
 
 components:
   x-amazon-apigateway-integrations:
-    eks:
+    auth:
+      # Unifies x-request-id with the edge request id.
       type: http_proxy
       httpMethod: ANY
       payloadFormatVersion: "1.0"
       connectionType: VPC_LINK
       connectionId: "${vpc_link_id}"
-      uri: "${nlb_listener_arn}"
+      uri: '${service_listener_arns[route_owner["auth"]]}'
       requestParameters:
         overwrite:path: $request.path
-        # Unifica o identificador de correlação
         overwrite:header.x-request-id: $context.requestId
+
+    users:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["users"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    users-customers:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["users-customers"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    me:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["me"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    me-password:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["me-password"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    me-area:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["me-area"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    customers:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["customers"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    vehicles:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["vehicles"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    work-orders:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["work-orders"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    work-orders-quotes:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["work-orders-quotes"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    services:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["services"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    services-metrics:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["services-metrics"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    parts-supplies:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["parts-supplies"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    stock:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["stock"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    quotes:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["quotes"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    payments:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns[route_owner["payments"]]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    work-order:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["work-order"]}'
+      requestParameters:
+        overwrite:path: $request.path
+        overwrite:header.x-request-id: $context.requestId
+
+    health-work-order:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["work-order"]}'
+      requestParameters:
+        overwrite:path: /api/health/ready
+        overwrite:header.x-request-id: $context.requestId
+
+    health-identity:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["identity"]}'
+      requestParameters:
+        overwrite:path: /api/health/ready
+        overwrite:header.x-request-id: $context.requestId
+
+    health-billing:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["billing"]}'
+      requestParameters:
+        overwrite:path: /api/health/ready
+        overwrite:header.x-request-id: $context.requestId
+
+    health-inventory:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["inventory"]}'
+      requestParameters:
+        overwrite:path: /api/health/ready
+        overwrite:header.x-request-id: $context.requestId
+
+    docs-work-order:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["work-order"]}'
+      requestParameters:
+        overwrite:path: /api/docs-json
+        overwrite:header.x-request-id: $context.requestId
+
+    docs-identity:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["identity"]}'
+      requestParameters:
+        overwrite:path: /api/docs-json
+        overwrite:header.x-request-id: $context.requestId
+
+    docs-billing:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["billing"]}'
+      requestParameters:
+        overwrite:path: /api/docs-json
+        overwrite:header.x-request-id: $context.requestId
+
+    docs-inventory:
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["inventory"]}'
+      requestParameters:
+        overwrite:path: /api/docs-json
+        overwrite:header.x-request-id: $context.requestId
+
+    webhook-billing:
+      # Keeps the received x-request-id: it is part of the x-signature HMAC.
+      type: http_proxy
+      httpMethod: ANY
+      payloadFormatVersion: "1.0"
+      connectionType: VPC_LINK
+      connectionId: "${vpc_link_id}"
+      uri: '${service_listener_arns["billing"]}'
+      requestParameters:
+        overwrite:path: $request.path
 
     lambda:
       type: aws_proxy
