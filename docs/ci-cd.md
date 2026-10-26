@@ -31,7 +31,7 @@ O CD tem um único job, `terraform-gateway`, sem `needs` com o workflow de CI.
 
 **CI — validações e abertura do PR**
 
-![CI do gateway: objetivos dos três jobs e descrição dos 13 steps; tf-validate e openapi-lint são dependências needs de open-pr](diagrams/ci-workflow.png)
+![CI do gateway: objetivos dos três jobs e descrição dos 14 steps; tf-validate e openapi-lint são dependências needs de open-pr](diagrams/ci-workflow.png)
 
 **CD — provisionamento do gateway**
 
@@ -62,6 +62,7 @@ O `plan` é **opcional por decisão**: as credenciais do laboratório são efêm
 | --- | --- | --- |
 | 1 | actions/checkout | Obtém a revisão que disparou o workflow; os comandos seguintes usam esse checkout. |
 | 2 | Lint the OpenAPI contract | Executa o lint estrutural do contrato `openapi/gateway.yaml` com Redocly, na configuração explicada abaixo; falha do lint reprova. |
+| 3 | Reject internal and catch-all routes | Procura em `paths` chave começando por `/internal` (sem diferenciar maiúsculas), uma variável gulosa na raiz ou logo sob `/api` (`/{proxy+}`, `/api/{qualquer+}`) ou `$default`; cada uma vira uma anotação de erro com a linha e a rota, e o job reprova. |
 
 Executa `redocly lint` sobre `openapi/gateway.yaml`.
 
@@ -85,7 +86,9 @@ npx --yes @redocly/cli@1.34.2 lint openapi/gateway.yaml \
 
 O job aceita sem falso positivo as construções específicas do provedor — extensões `x-amazon-apigateway-*`, o `$ref` para `components.x-amazon-apigateway-integrations`, o método coringa e a variável de caminho gulosa — e continua reprovando sintaxe inválida, operação sem `responses` e response sem `description`.
 
-> **Limitação conhecida.** A validação estrutural alcança apenas operações declaradas com métodos padrão da especificação. A rota de proxy usa `x-amazon-apigateway-any-method`, que é **extensão** — seu conteúdo fica fora do schema. Na prática isso não tem consequência: foi verificado contra a AWS que o import aceita um documento sem o `parameters` do `proxy` e cria rota e integração corretamente.
+> **Limitação conhecida.** A validação estrutural alcança apenas operações declaradas com métodos padrão da especificação. As rotas de prefixo usam `x-amazon-apigateway-any-method`, que é **extensão**: seu conteúdo fica fora do schema. Na prática isso não tem consequência: foi verificado contra a AWS que o import aceita um documento sem o `parameters` do `proxy` e cria rota e integração corretamente.
+
+**Guarda de rotas.** O passo `Reject internal and catch-all routes` garante, no PR, que a borda nunca publique um caminho `/internal` nem um catch-all (variável gulosa na raiz ou logo sob `/api`, ou a rota `$default`). É um `grep` sobre as chaves de `paths`, sem ferramenta nova; as rotas `{proxy+}` dos prefixos (`/api/<recurso>/{proxy+}`) não casam com o padrão. `/internal` é procurado sem diferenciar maiúsculas porque os serviços roteiam assim.
 
 ### Job `open-pr`
 
@@ -134,31 +137,37 @@ Um único job, `terraform-gateway`, sob o environment `production`. No disparo m
 cd terraform
 EP="$(terraform output -raw api_endpoint)"
 
-# 1. Prontidão — NÃO vivacidade
-curl -i "$EP/api/health/ready"
+# 1. Prontidão de cada serviço — NÃO vivacidade
+for ctx in work-order identity billing inventory; do
+  curl -i "$EP/health/$ctx"
+done
 ```
 
-**Por que prontidão e não vivacidade.** Por causa do fail-open do balanceador: com um único nó e o banco fora, `/api/health/live` responde `200` **com a solução inutilizável**, e quem verificasse concluiria por sucesso. `/ready` é o único que distingue os dois casos.
+**Por que prontidão e não vivacidade.** Por causa do fail-open do balanceador: com o banco de um serviço fora, `/api/health/live` responde `200` **com o serviço inutilizável**, e quem verificasse concluiria por sucesso. `GET /health/<contexto>` encaminha para `/api/health/ready` do serviço, o único que distingue os dois casos. Um serviço ainda não implantado responde erro de integração, por desenho: isso não indica falha do provisionamento do Gateway.
 
 | Resposta | Significado |
 |---|---|
 | `200` | Caminho completo saudável |
-| `503` com envelope da aplicação | O API Gateway e a rede estão bem; a aplicação não está pronta (banco, tipicamente) |
+| `503` com envelope do serviço | O API Gateway e a rede estão bem; o serviço não está pronto (banco, tipicamente) |
 | `5xx` com `{"message":"..."}` | Falha do **caminho de rede**: VPC Link inativo, listener ausente, conexão recusada |
 | sem resposta / timeout longo | Ver abaixo |
 
 **Uma primeira resposta negativa não é conclusiva.** O caminho privado leva minutos para se restabelecer em dois casos conhecidos: a propagação do registro do alvo no target group, e — principalmente — logo após criar o VPC Link, que responde `AVAILABLE` **antes** de o plano de dados estar utilizável. Repita a tentativa antes de concluir por falha; o detalhe está em [architecture.md › Falhas conhecidas](architecture.md#falhas-conhecidas).
 
 ```bash
-# 2. Um caminho não publicado precisa ser recusado PELO API GATEWAY
+# 2. Caminho não publicado e rota interna precisam ser recusados PELO API GATEWAY
 curl -i "$EP/__caminho-nao-publicado__"     # espera-se 404 {"message":"Not Found"}
+curl -i "$EP/internal/users/x"              # espera-se 404 {"message":"Not Found"}
+curl -i "$EP/api/inexistente"               # espera-se 404 {"message":"Not Found"}
 
-# 3. Uma rota protegida sem credencial: o 401 vem da APLICAÇÃO, não do API Gateway
-curl -i "$EP/api/customers"                  # espera-se 401 com o envelope da API
+# 3. Uma rota protegida sem credencial: o 401 vem do SERVIÇO DONO, não do API Gateway
+curl -i "$EP/api/customers"                  # espera-se 401 com o envelope do serviço
 
 # 4. Os mappings no recurso provisionado, não apenas no documento versionado
 aws apigatewayv2 get-integrations --api-id "$(terraform output -raw api_id)" \
   --query 'Items[].[IntegrationType,PayloadFormatVersion,RequestParameters]'
+aws apigatewayv2 get-routes --api-id "$(terraform output -raw api_id)" \
+  --query 'Items[].RouteKey' --output text | tr '\t' '\n' | sort
 ```
 
 ```bash

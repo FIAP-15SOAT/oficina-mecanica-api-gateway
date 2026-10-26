@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceito — 2026-09-07
+Aceito — 2026-09-07. Revisado em 2026-10-25 pelo [ADR 0005](0005-integracao-privada-por-servico-e-tabela-de-donos.md): vários backends e o webhook do Mercado Pago (seção [Revisão: vários backends e webhook autenticado por HMAC](#revisão-vários-backends-e-webhook-autenticado-por-hmac)).
 
 Referencia e preserva o [Arquitetura de identidade externa da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/architecture.md#identidade-externa-autenticação-e-autorização-por-vínculo), que desenhou a separação entre os dois fluxos de autenticação.
 
@@ -37,6 +37,12 @@ O Gateway **não autentica e não autoriza**. Ele encaminha o cabeçalho de auto
 
 Throttling mais restritivo nas **duas** rotas de login. Com a ressalva que precisa estar escrita: é um alvo **agregado por rota**, aplicado com melhor esforço pelo token bucket da conta/stage/rota — **não é cota por cliente, por identidade ou por endereço de origem**, e **não é proteção contra força bruta por conta**, o que a `security.md` da função serverless já afirmava antes desta mudança.
 
+### Revisão: vários backends e webhook autenticado por HMAC
+
+A decisão vale para cada um dos quatro serviços (work-order, identity, billing, inventory): cada serviço valida o token e decide a autorização, e o Gateway encaminha o cabeçalho intacto, qualquer que seja o dono da rota.
+
+O webhook do Mercado Pago (`POST /webhooks/mercadopago`) não tem token de usuário. Ele é autenticado pelo **billing**, que verifica a assinatura HMAC `x-signature` com o segredo do webhook. Para isso a borda preserva a query string e o `x-request-id` dessa rota, que entram no cálculo da assinatura, e aplica nela um limite de frequência próprio. Um autorizador no Gateway para essa rota exigiria copiar o segredo do webhook para a borda, com o mesmo problema de custódia da alternativa Lambda authorizer abaixo.
+
 ## Alternativas consideradas e descartadas
 
 - **JWT authorizer nativo do HTTP API.** Impossível para os dois fluxos, pelos motivos 1 e 2.
@@ -57,7 +63,7 @@ Throttling mais restritivo nas **duas** rotas de login. Com a ressalva que preci
 
 - **Tráfego não autenticado alcança os backends.** Uma requisição com token inválido consome recurso do cluster ou uma invocação da função antes de ser rejeitada. O throttling limita o volume; não elimina o caso.
 - **O API Gateway não tem visão de identidade.** O log de acesso registra rota, status e latência, nunca quem chamou. A atribuição de identidade vem do log estruturado da aplicação, ligado à linha do API Gateway pelo mesmo `x-request-id`.
-- **A API aplica autorização por controller, não por guard global.** Hoje todos os controllers de negócio declaram `@UseGuards`, e `auth`/`health` são exceções deliberadas — não há buraco atual. O que esta arquitetura muda é o **custo de um esquecimento futuro**: com `ANY /api/{proxy+}`, um controller novo sem `@UseGuards` fica público na internet sem passar por este repositório. A correção pertence ao repositório da API — registrar `JwtAuthGuard` como `APP_GUARD`, já que o `@Public()` e o lookup por reflector existem, ou um teste de política de rotas com allowlist — e **não** a um autorizador no API Gateway, que esta decisão descarta por impossibilidade técnica.
+- **A API aplica autorização por controller, não por guard global.** Hoje todos os controllers de negócio declaram `@UseGuards`, e `auth`/`health` são exceções deliberadas — não há buraco atual. O que esta arquitetura muda é o **custo de um esquecimento futuro**: um controller novo sob um prefixo publicado, sem `@UseGuards`, fica público na internet sem passar por este repositório. A correção pertence ao repositório da API — registrar `JwtAuthGuard` como `APP_GUARD`, já que o `@Public()` e o lookup por reflector existem, ou um teste de política de rotas com allowlist — e **não** a um autorizador no API Gateway, que esta decisão descarta por impossibilidade técnica.
 
 ## Gatilho de revisão
 

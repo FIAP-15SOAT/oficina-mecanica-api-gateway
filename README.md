@@ -2,7 +2,7 @@
 
 # 🚪 Oficina Mecânica — API Gateway (IaC)
 
-**Ponto de entrada público da solução Oficina Mecânica: roteamento, integração privada com o cluster EKS e limitação de frequência, provisionados com Terraform.**
+**Ponto de entrada público da solução Oficina Mecânica: roteamento por serviço dono, integração privada com o cluster EKS e limitação de frequência, provisionados com Terraform.**
 
 ![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.11.0-844FBA?logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-Cloud-FF9900?logo=amazon-aws&logoColor=white)
@@ -18,20 +18,22 @@ Este repositório contém o código de **Infraestrutura como Código (IaC)** que
 
 Faz parte do ecossistema de aplicação e infraestrutura da pós-graduação em Arquitetura de Software da FIAP (turma 15SOAT).
 
-A entrada pública encaminha o login de clientes à Lambda e as rotas `/api/*` à API no EKS. O cluster recebe esse tráfego pelo NLB interno e pelo `Service` NodePort; a função executa nas subnets privadas e consulta diretamente o RDS. A identidade de cliente e as operações internas continuam sob responsabilidade dos respectivos backends.
+A entrada pública encaminha o login de clientes à Lambda e cada prefixo `/api/<recurso>` ao serviço dono no EKS (work-order, identity, billing ou inventory), conforme a tabela `route_owner`. O cluster recebe esse tráfego pelo listener de cada serviço no NLB interno e pelo `Service` NodePort dele; a função executa nas subnets privadas e consulta diretamente o RDS. A identidade de cliente e as operações internas continuam sob responsabilidade dos respectivos backends.
 
 ### Responsabilidade deste repositório
 
 O que ele **é** dono:
 
-- A **superfície de roteamento pública** — quais métodos e caminhos existem e para onde vão.
+- A **superfície de roteamento pública** — quais métodos e caminhos existem e qual serviço é dono de cada um.
+- A **tabela de donos** (`route_owner`): trocar o dono de um prefixo é trocar uma entrada dela.
 - O **caminho privado** do API Gateway até o cluster, do VPC Link para cima.
 - Os **controles de API Gateway**: limitação de frequência, log de acesso e métricas por rota.
 
 O que ele **deliberadamente não faz**:
 
 - **Não autentica e não autoriza.** Encaminha o cabeçalho de autorização intacto; `401` e `403` continuam sendo produzidos pelos backends. Não é adiamento — é impossibilidade técnica somada a uma propriedade de segurança que seria destruída. Ver [ADR 0004](docs/adr/0004-autenticacao-permanece-nos-backends.md).
-- **Não valida payload.** Os contratos de request e response pertencem à API e à função serverless, e são referenciados por link — nunca copiados.
+- **Não publica rota interna nem catch-all.** Caminho fora das rotas declaradas, inclusive `/internal/...`, recebe `404` da borda; a guarda do CI reprova o contrato que tentar publicá-los.
+- **Não valida payload.** Os contratos de request e response pertencem aos serviços e à função serverless, e são referenciados por link — nunca copiados.
 - **Não é dono do balanceador interno.** Ele vive em [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s), pelos motivos do [ADR 0003](docs/adr/0003-integracao-privada-com-o-eks.md).
 
 ## 🏗️ Arquitetura em alto nível
@@ -42,32 +44,38 @@ O que ele **deliberadamente não faz**:
                             │  stage $default, auto_deploy │
                             └──────┬────────────────┬──────┘
                                    │                │
-       ANY /api/{proxy+}           │                │   POST /customer-auth/login
-       POST /api/auth/login        │                │
+  ANY /api/<recurso>[/{proxy+}]    │                │   POST /customer-auth/login
+  rotas exatas, /health/<ctx>,     │                │
+  /docs/<ctx>, /webhooks/mercadopago                │
                                    ▼                ▼
                         ┌──────────────────┐   ┌──────────────────────────┐
                         │  VPC Link V2     │   │  função serverless de    │
                         │  ENIs privadas   │   │  autenticação de clientes│
                         └────────┬─────────┘   └──────────────────────────┘
                                  ▼
-                        ┌──────────────────┐
-                        │  NLB interno :80 │   ← provisionado em oficina-mecanica-infra-k8s
-                        └────────┬─────────┘
+          ┌──────────────────────────────────────────────┐
+          │  NLB interno: :80 work-order  :8081 identity │   ← provisionado em
+          │               :8082 billing   :8083 inventory│     oficina-mecanica-infra-k8s
+          └──────────────────────┬───────────────────────┘
                                  ▼
-                        NodePort 30080 do nó ──▶ Pod da API (EKS)
+                  NodePort 30080..30083 do nó ──▶ Pods de cada serviço (EKS)
 ```
 
 Nada no caminho até o cluster tem endereço público: o balanceador é **interno**, as ENIs do VPC Link vivem nas **subnets privadas**, e a porta exposta nos nós só aceita tráfego da **CIDR da VPC**.
 
-### As três rotas
+### Rotas e donos
 
-| Rota | Por que é explícita | Backend |
-|---|---|---|
-| `POST /customer-auth/login` | backend distinto **e** limitação de frequência própria | função serverless (`AWS_PROXY`, payload `2.0`) |
-| `POST /api/auth/login` | apenas limitação de frequência própria | API no EKS (`HTTP_PROXY` via VPC Link, payload `1.0`) |
-| `ANY /api/{proxy+}` | todo o resto da API | API no EKS |
+| Rotas | Destino |
+|---|---|
+| `ANY /api/<recurso>` e `ANY /api/<recurso>/{proxy+}` para `users`, `customers`, `vehicles`, `work-orders`, `services`, `parts-supplies`, `quotes` e `payments`; `POST /api/auth/login` e `ANY /api/auth/{proxy+}`; área do cliente em `/api/me/work-orders` e `/api/me/quotes` | serviço dono do grupo em `route_owner` (hoje, todos no work-order) |
+| Rotas exatas aninhadas: `GET /api/users/{userId}/customers`, `GET /api/work-orders/{id}/quotes`, `GET /api/services/{id}/metrics` | dono da própria chave em `route_owner`, que pode diferir do dono do prefixo pai; os demais métodos seguem o prefixo |
+| Rotas exatas sem prefixo: `GET /api/me`, `PATCH /api/me/password`, `GET /api/services-metrics`, `GET /api/stock-movements`, `GET /api/stock-reservations` | dono da própria chave em `route_owner`; outro método recebe `404` da borda |
+| `GET /api/health/live`, `GET /api/health/ready`, `/api/docs*` | work-order |
+| `GET /health/<contexto>` e `GET /docs/<contexto>` | prontidão e documento OpenAPI de cada serviço |
+| `POST /webhooks/mercadopago` | billing, preservando query string e `x-request-id` |
+| `POST /customer-auth/login` | função serverless (`AWS_PROXY`, payload `2.0`) |
 
-> **A regra que evita rediscussão a cada rota nova:** uma rota sai do proxy quando — e apenas quando — o Gateway tem algo específico a dizer sobre ela. Consequência deliberada: um endpoint novo da API fica público **sem passar por este repositório**. É o que elimina o drift entre o contrato da aplicação e o do API Gateway.
+Um endpoint novo sob um prefixo publicado fica acessível sem mudança aqui; um prefixo novo exige uma entrada em `route_owner` e as duas rotas no contrato. A tabela completa de donos, com listener e Swagger de cada serviço, está em [docs/openapi.md](docs/openapi.md#tabela-de-donos-das-rotas).
 
 ## 🧰 Stack
 
@@ -90,7 +98,7 @@ Nada no caminho até o cluster tem endereço público: o balanceador é **intern
 | Repositório | O que este consome | Como |
 |---|---|---|
 | [`oficina-mecanica-infra-base`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | `vpc_id`, `vpc_cidr`, `private_subnet_ids` | `terraform_remote_state` |
-| [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | `api_nlb_listener_arn` | `terraform_remote_state` |
+| [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | `service_listener_arns`, `service_listener_ports` | `terraform_remote_state` |
 
 A leitura é direta, sem tratamento que a torne opcional: se um dos contratos não existir, o `plan` falha nomeando o que falta, **antes** de criar qualquer recurso.
 
@@ -100,11 +108,11 @@ A leitura é direta, sem tratamento que a torne opcional: se um dos contratos n�
 .
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml               # fmt, validate, lint do OpenAPI, plan opcional e abertura de PR
+│       ├── ci.yml               # fmt, validate, lint e guarda de rotas do OpenAPI, plan opcional e abertura de PR
 │       └── cd.yml               # terraform apply em push na main ou disparo manual
 ├── docs/
 │   ├── architecture.md          # fluxo de uma requisição, cadeia de rede e falhas conhecidas
-│   ├── openapi.md               # estratégia de contrato e o que vive em cada artefato
+│   ├── openapi.md               # estratégia de contrato, tabela de donos e o que vive em cada artefato
 │   ├── terraform.md             # recursos, variáveis, outputs e como aplicar
 │   ├── ci-cd.md                 # os dois workflows job a job e a configuração externa
 │   ├── security.md              # postura do API Gateway e riscos aceitos
@@ -115,14 +123,14 @@ A leitura é direta, sem tratamento que a torne opcional: se um dos contratos n�
 │       ├── ci-workflow.png      # jobs, steps descritos e dependências do CI
 │       └── cd-workflow.png      # job, steps descritos e gate do CD
 ├── openapi/
-│   └── gateway.yaml             # a superfície de roteamento pública
+│   └── gateway.yaml             # a superfície de roteamento pública e as integrações por grupo
 ├── terraform/
 │   ├── .terraform.lock.hcl       # versões e checksums dos providers
 │   ├── backend.tf               # backend S3 com lock nativo
 │   ├── providers.tf             # provider AWS e os dois remote states
 │   ├── data.tf                  # conta e região
-│   ├── locals.tf                # nomes derivados de project_name
-│   ├── security_groups.tf       # security group do VPC Link (só egress)
+│   ├── locals.tf                # nomes derivados, mapas do infra-k8s e a tabela route_owner
+│   ├── security_groups.tf       # security group do VPC Link (só egress, uma regra por listener)
 │   ├── api_gateway.tf           # VPC Link, API (body) e stage
 │   ├── cloudwatch.tf            # log group do log de acesso
 │   ├── variables.tf
@@ -173,13 +181,13 @@ Estado remoto no S3, no mesmo padrão dos demais repositórios de infraestrutura
 - **Chave**: `infra/prod-simulated/api-gateway/terraform.tfstate`
 - **Lock**: nativo do S3 (`use_lockfile = true`)
 
-Cinco recursos: VPC Link, API, stage, security group e log group. Estrutura plana, sem módulos — com essa quantidade, um módulo seria abstração estética.
+Recursos: VPC Link, API, stage, security group com uma regra de egress por listener de serviço e log group. Estrutura plana, sem módulos — com essa quantidade, um módulo seria abstração estética. O dono de cada grupo de rotas vem da tabela `route_owner` em `terraform/locals.tf`, e um dono inválido quebra o `plan`.
 
 Detalhamento de recursos, variáveis e outputs em [docs/terraform.md](docs/terraform.md).
 
 ## 🔄 CI/CD e deploy
 
-- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — dispara em `push` nas branches `feature/**` e `fix/**`. Executa `terraform fmt -check`, `init -backend=false`, `validate`, o **lint do contrato OpenAPI** e um `plan` opcional (pulado quando a configuração das credenciais falha; erro de um `init` ou `plan` executado reprova). Ao final, abre o Pull Request para `main` de forma idempotente.
+- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — dispara em `push` nas branches `feature/**` e `fix/**`. Executa `terraform fmt -check`, `init -backend=false`, `validate`, o **lint do contrato OpenAPI**, a **guarda contra rota `/internal` ou catch-all** e um `plan` opcional (pulado quando a configuração das credenciais falha; erro de um `init` ou `plan` executado reprova). Ao final, abre o Pull Request para `main` de forma idempotente.
 - **CD** ([`cd.yml`](.github/workflows/cd.yml)) — dispara em `push` na `main` ou por **Run workflow**. Executa `init`, `validate`, `plan` e `apply -auto-approve` sob o environment `production`, com `concurrency: production` sem cancelamento. Controlado pela variable `ENABLE_DEPLOY`, que o disparo manual ignora somente quando a branch selecionada é `main`.
 
 A tabela completa de secrets, variables, environments e proteções está em [docs/ci-cd.md](docs/ci-cd.md) — nenhum item de configuração externa fica implícito.
@@ -191,7 +199,7 @@ job, as descrições dos steps e as dependências `needs`.
 | Depende de | Para quê |
 |---|---|
 | [`oficina-mecanica-infra-base`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | VPC, CIDR e subnets privadas |
-| [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | ARN do listener do NLB interno |
+| [`oficina-mecanica-infra-k8s`](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | ARN e porta do listener de cada serviço no NLB interno |
 
 | É consumido por | Para quê |
 |---|---|
@@ -203,18 +211,21 @@ job, as descrições dos steps e as dependências `needs`.
 | Documento | Conteúdo |
 |---|---|
 | 🏛️ [Arquitetura](docs/architecture.md) | Fluxo de uma requisição até cada backend, cadeia de rede e security groups, divisão de responsabilidade e **falhas conhecidas** |
-| 📜 [Contrato OpenAPI](docs/openapi.md) | O que vive no documento e o que vive no Terraform, quando uma rota sai do proxy, como adicionar uma rota |
+| 📜 [Contrato OpenAPI](docs/openapi.md) | O que vive no documento e o que vive no Terraform, a tabela de donos das rotas, como publicar um prefixo e como virar o dono dele |
 | 🌍 [Terraform](docs/terraform.md) | Recursos em nível de HCL, remote states, variáveis, outputs, convenções e como aplicar |
 | 🔄 [CI/CD](docs/ci-cd.md) | Os dois workflows job a job, gates, e a tabela completa de configuração externa |
 | 🔒 [Segurança](docs/security.md) | Postura do API Gateway, o que é controlado agora e os riscos aceitos com gatilho de revisão |
 | 📊 [Observabilidade](docs/observability.md) | Log de acesso, correlação fim a fim, atribuição do endereço de origem e granularidade real das métricas |
-| 📐 [ADRs](docs/adr) | [0001 HTTP API em vez de REST](docs/adr/0001-http-api-em-vez-de-rest-api.md) · [0002 Contrato em OpenAPI](docs/adr/0002-contrato-do-gateway-em-openapi.md) · [0003 Integração privada com o EKS](docs/adr/0003-integracao-privada-com-o-eks.md) · [0004 Autenticação permanece nos backends](docs/adr/0004-autenticacao-permanece-nos-backends.md) |
+| 📐 [ADRs](docs/adr) | [0001 HTTP API em vez de REST](docs/adr/0001-http-api-em-vez-de-rest-api.md) · [0002 Contrato em OpenAPI](docs/adr/0002-contrato-do-gateway-em-openapi.md) · [0003 Integração privada com o EKS](docs/adr/0003-integracao-privada-com-o-eks.md) (substituída pela 0005) · [0004 Autenticação permanece nos backends](docs/adr/0004-autenticacao-permanece-nos-backends.md) · [0005 Integração privada por serviço e tabela de donos](docs/adr/0005-integracao-privada-por-servico-e-tabela-de-donos.md) |
 
 ## 🌐 Ecossistema de Repositórios
 
 | Repositório | Papel |
 |---|---|
-| [oficina-mecanica-work-order-service](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service) | Aplicação NestJS, domínio e manifests Kubernetes |
+| [oficina-mecanica-work-order-service](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service) | Serviço Work Order (NestJS), domínio e manifests Kubernetes |
+| [oficina-mecanica-identity-service](https://github.com/FIAP-15SOAT/oficina-mecanica-identity-service) | Serviço Identity (NestJS) |
+| [oficina-mecanica-billing-service](https://github.com/FIAP-15SOAT/oficina-mecanica-billing-service) | Serviço Billing (NestJS), incluindo o webhook do Mercado Pago |
+| [oficina-mecanica-inventory-service](https://github.com/FIAP-15SOAT/oficina-mecanica-inventory-service) | Serviço Inventory (NestJS) |
 | [oficina-mecanica-infra-base](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-base) | Fundação de rede na AWS (VPC, subnets, gateways) |
 | [oficina-mecanica-infra-k8s](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-k8s) | Cluster EKS, node group, ECR e o **caminho privado de entrada** |
 | [oficina-mecanica-infra-database-work-order](https://github.com/FIAP-15SOAT/oficina-mecanica-infra-database-work-order) | Amazon RDS PostgreSQL 18 e ElastiCache Valkey 9.1 do `work-order`, fora do cluster |

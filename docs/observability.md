@@ -34,7 +34,7 @@ Exemplo ilustrativo, com endereço reservado para documentação:
 ```json
 {"httpMethod":"GET","integrationError":"-","integrationLatency":"9","integrationStatus":"401",
  "requestId":"example-request-id","requestTime":"12/Sep/2026:12:00:00 +0000","responseLatency":"16",
- "routeKey":"ANY /api/{proxy+}","sourceIp":"192.0.2.1","status":"401"}
+ "routeKey":"ANY /api/customers/{proxy+}","sourceIp":"192.0.2.1","status":"401"}
 ```
 
 ### O que o log deliberadamente não contém
@@ -57,13 +57,15 @@ Use `status`, `integrationStatus` e `integrationError` junto com o tipo de integ
 
 ## Correlação fim a fim
 
-O API Gateway **sobrescreve** `x-request-id` com `$context.requestId` nas **duas** integrações. A API reutiliza IDs válidos com o alfabeto `[A-Za-z0-9._:+/=-]`, até 128 caracteres, após sanitização, e consegue ligar `requestId` do Gateway a `request.id` da aplicação.
+O API Gateway **sobrescreve** `x-request-id` com `$context.requestId` em **todas** as integrações, menos a do webhook do Mercado Pago (abaixo). Os serviços reutilizam IDs válidos com o alfabeto `[A-Za-z0-9._:+/=-]`, até 128 caracteres, após sanitização, e conseguem ligar `requestId` do Gateway a `request.id` do serviço.
 
-**Na Lambda, a junção depende do alfabeto aceito.** `resolveCorrelationId(event.headers, context.awsRequestId)` aceita `[A-Za-z0-9._:-]`, até 128 caracteres, após sanitização. Se o ID do Gateway contiver `=`, `+` ou `/`, a função o rejeita e usa o ID da invocação. O mapeamento está declarado nas duas integrações, mas o código atual não garante um ID compartilhado entre Gateway e Lambda em todos os atendimentos.
+**Na Lambda, a junção depende do alfabeto aceito.** `resolveCorrelationId(event.headers, context.awsRequestId)` aceita `[A-Za-z0-9._:-]`, até 128 caracteres, após sanitização. Se o ID do Gateway contiver `=`, `+` ou `/`, a função o rejeita e usa o ID da invocação. O mapeamento está declarado na integração da função, mas o código atual não garante um ID compartilhado entre Gateway e Lambda em todos os atendimentos.
 
 `request.id` é correlação de requisição, distinta de `trace_id`/`span_id`. A Lambda não tem tracing distribuído habilitado. O login nela e uma chamada posterior a `/api/me/**` são requisições distintas e recebem IDs próprios do Gateway.
 
-**Trade-off aceito.** Um `x-request-id` fornecido pelo cliente é descartado. Nenhum cliente atual envia; se algum passar a enviar, a alternativa é mapear para um cabeçalho adicional em vez de sobrescrever.
+**Exceção: webhook do Mercado Pago.** Em `POST /webhooks/mercadopago` a borda **não** sobrescreve o `x-request-id`: o Mercado Pago calcula a assinatura `x-signature` sobre o `x-request-id` e o `data.id` que envia, e o billing precisa dos valores originais para verificá-la. Nessa rota, o `requestId` do log de acesso não aparece no log do billing; a correlação é feita pela rota (`routeKey`), pelo instante (`requestTime`) e pelo identificador da order que o billing registra.
+
+**Trade-off aceito.** Fora do webhook, um `x-request-id` fornecido pelo cliente é descartado. Nenhum cliente atual envia; se algum passar a enviar, a alternativa é mapear para um cabeçalho adicional em vez de sobrescrever.
 
 ## O endereço de origem é atribuído no API Gateway
 
@@ -92,11 +94,14 @@ Métricas detalhadas estão habilitadas — contagem, erros de cliente, erros de
 |---|---|
 | `POST /customer-auth/login` | a função serverless |
 | `POST /api/auth/login` | o login da API |
-| `ANY /api/{proxy+}` | **todo o resto da API, em conjunto** |
+| `ANY /api/<recurso>` e `ANY /api/<recurso>/{proxy+}` | **todos os endpoints do prefixo, em conjunto**, e portanto o serviço dono do prefixo |
+| rotas exatas (`GET /api/me`, `GET /api/work-orders/{id}/quotes`, ...) | o endpoint exato, separado do prefixo pai |
+| `POST /webhooks/mercadopago` | as notificações do Mercado Pago ao billing |
+| `GET /health/<contexto>` e `GET /docs/<contexto>` | a prontidão e a documentação de cada serviço |
 
-**A granularidade é a da rota do Gateway, não a dos endpoints da aplicação.** Se um único endpoint servido pelo proxy passar a falhar, as métricas do API Gateway apontam a rota de proxy — a identificação do endpoint vem do log estruturado da aplicação, pelo `http.route`. O API Gateway não promete métricas por endpoint, e não deve ser lida como se prometesse.
+**A granularidade é a da rota do Gateway, não a dos endpoints do serviço.** Se um prefixo inteiro degrada, as métricas apontam o prefixo e, pela [tabela de donos](openapi.md#tabela-de-donos-das-rotas), o serviço. Se um único endpoint servido pela rota gulosa de um prefixo passar a falhar, as métricas apontam a rota do prefixo; a identificação do endpoint vem do log estruturado do serviço, pelo `http.route`. O API Gateway não promete métricas por endpoint, e não deve ser lida como se prometesse.
 
-> ⚠️ **`detailed_metrics_enabled` é declarado nos dois níveis** — em `default_route_settings` e **repetido em cada bloco de `route_settings`**. O provider envia `false` para todo campo omitido dentro de um bloco de rota; omitir desligaria as métricas exatamente nas duas rotas de login.
+> ⚠️ **`detailed_metrics_enabled` é declarado nos dois níveis** — em `default_route_settings` e **repetido em cada bloco de `route_settings`**. O provider envia `false` para todo campo omitido dentro de um bloco de rota; omitir desligaria as métricas exatamente nas rotas de login e no webhook.
 
 ## Retenção
 
