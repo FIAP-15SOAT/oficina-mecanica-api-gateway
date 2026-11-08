@@ -25,10 +25,10 @@ locals {
     "vehicles"           = "work-order"
     "work-orders"        = "work-order"
     "work-orders-quotes" = "work-order"
-    "services"           = "work-order"
+    "services"           = "inventory"
     "services-metrics"   = "work-order"
-    "parts-supplies"     = "work-order"
-    "stock"              = "work-order"
+    "parts-supplies"     = "inventory"
+    "stock"              = "inventory"
     "quotes"             = "work-order"
     "payments"           = "work-order"
   }
