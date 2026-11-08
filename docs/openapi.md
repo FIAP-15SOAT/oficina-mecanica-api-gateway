@@ -79,10 +79,10 @@ Cada grupo usa a integração de mesmo nome em `openapi/gateway.yaml`, cujo dest
 | `vehicles` | `ANY /api/vehicles`, `ANY /api/vehicles/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
 | `work-orders` | `ANY /api/work-orders`, `ANY /api/work-orders/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
 | `work-orders-quotes` | `GET /api/work-orders/{id}/quotes` | work-order | 80 | Rota exata: segue o dono dos orçamentos, não o das ordens | `GET /docs/work-order` |
-| `services` | `ANY /api/services`, `ANY /api/services/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
-| `services-metrics` | `GET /api/services-metrics`, `GET /api/services/{id}/metrics` | work-order | 80 | Rotas exatas: as métricas de execução ficam no work-order quando `services` for para o inventory | `GET /docs/work-order` |
-| `parts-supplies` | `ANY /api/parts-supplies`, `ANY /api/parts-supplies/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
-| `stock` | `GET /api/stock-movements`, `GET /api/stock-reservations` | work-order | 80 | Só leitura | `GET /docs/work-order` |
+| `services` | `ANY /api/services`, `ANY /api/services/{proxy+}` | inventory | 8083 | | `GET /docs/inventory` |
+| `services-metrics` | `GET /api/services-metrics`, `GET /api/services/{id}/metrics` | work-order | 80 | Rotas exatas: as métricas de execução ficam no work-order, dono das ordens de serviço, enquanto o catálogo `services` é do inventory | `GET /docs/work-order` |
+| `parts-supplies` | `ANY /api/parts-supplies`, `ANY /api/parts-supplies/{proxy+}` | inventory | 8083 | | `GET /docs/inventory` |
+| `stock` | `GET /api/stock-movements`, `GET /api/stock-reservations` | inventory | 8083 | Só leitura | `GET /docs/inventory` |
 | `quotes` | `ANY /api/quotes`, `ANY /api/quotes/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
 | `payments` | `ANY /api/payments`, `ANY /api/payments/{proxy+}` | work-order | 80 | Sem endpoint atendido ainda | `GET /docs/work-order` |
 
