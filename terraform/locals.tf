@@ -30,6 +30,6 @@ locals {
     "parts-supplies"     = "inventory"
     "stock"              = "inventory"
     "quotes"             = "work-order"
-    "payments"           = "work-order"
+    "payments"           = "billing"
   }
 }
