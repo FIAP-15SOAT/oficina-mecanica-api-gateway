@@ -84,7 +84,7 @@ Cada grupo usa a integração de mesmo nome em `openapi/gateway.yaml`, cujo dest
 | `parts-supplies` | `ANY /api/parts-supplies`, `ANY /api/parts-supplies/{proxy+}` | inventory | 8083 | | `GET /docs/inventory` |
 | `stock` | `GET /api/stock-movements`, `GET /api/stock-reservations` | inventory | 8083 | Só leitura | `GET /docs/inventory` |
 | `quotes` | `ANY /api/quotes`, `ANY /api/quotes/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
-| `payments` | `ANY /api/payments`, `ANY /api/payments/{proxy+}` | work-order | 80 | Sem endpoint atendido ainda | `GET /docs/work-order` |
+| `payments` | `ANY /api/payments`, `ANY /api/payments/{proxy+}` | billing | 8082 | | `GET /docs/billing` |
 
 **Rotas fora da tabela**, com destino fixo:
 
