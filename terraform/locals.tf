@@ -24,12 +24,12 @@ locals {
     "customers"          = "work-order"
     "vehicles"           = "work-order"
     "work-orders"        = "work-order"
-    "work-orders-quotes" = "work-order"
+    "work-orders-quotes" = "billing"
     "services"           = "inventory"
     "services-metrics"   = "work-order"
     "parts-supplies"     = "inventory"
     "stock"              = "inventory"
-    "quotes"             = "work-order"
+    "quotes"             = "billing"
     "payments"           = "billing"
   }
 }
