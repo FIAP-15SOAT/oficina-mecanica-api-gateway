@@ -15,11 +15,11 @@ locals {
   # Owner service of each published route group. Each value must be a key of
   # `service_listener_arns`; changing one moves only that group's routes.
   route_owner = {
-    "auth"               = "work-order"
-    "users"              = "work-order"
+    "auth"               = "identity"
+    "users"              = "identity"
     "users-customers"    = "work-order"
-    "me"                 = "work-order"
-    "me-password"        = "work-order"
+    "me"                 = "identity"
+    "me-password"        = "identity"
     "me-area"            = "work-order"
     "customers"          = "work-order"
     "vehicles"           = "work-order"

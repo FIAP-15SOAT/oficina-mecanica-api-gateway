@@ -67,7 +67,7 @@ Nada no caminho até o cluster tem endereço público: o balanceador é **intern
 
 | Rotas | Destino |
 |---|---|
-| `ANY /api/<recurso>` e `ANY /api/<recurso>/{proxy+}` para `users`, `customers`, `vehicles`, `work-orders`, `services`, `parts-supplies`, `quotes` e `payments`; `POST /api/auth/login` e `ANY /api/auth/{proxy+}`; área do cliente em `/api/me/work-orders` e `/api/me/quotes` | serviço dono do grupo em `route_owner` (hoje, `services` e `parts-supplies` no inventory, `quotes` e `payments` no billing e os demais no work-order) |
+| `ANY /api/<recurso>` e `ANY /api/<recurso>/{proxy+}` para `users`, `customers`, `vehicles`, `work-orders`, `services`, `parts-supplies`, `quotes` e `payments`; `POST /api/auth/login` e `ANY /api/auth/{proxy+}`; área do cliente em `/api/me/work-orders` e `/api/me/quotes` | serviço dono do grupo em `route_owner` (hoje, `auth`, `users`, `me` e `me-password` no identity, `services` e `parts-supplies` no inventory, `quotes` e `payments` no billing e os demais no work-order) |
 | Rotas exatas aninhadas: `GET /api/users/{userId}/customers`, `GET /api/work-orders/{id}/quotes`, `GET /api/services/{id}/metrics` | dono da própria chave em `route_owner`, que pode diferir do dono do prefixo pai; os demais métodos seguem o prefixo |
 | Rotas exatas sem prefixo: `GET /api/me`, `PATCH /api/me/password`, `GET /api/services-metrics`, `GET /api/stock-movements`, `GET /api/stock-reservations` | dono da própria chave em `route_owner`; outro método recebe `404` da borda |
 | `GET /api/health/live`, `GET /api/health/ready`, `/api/docs*` | work-order |
