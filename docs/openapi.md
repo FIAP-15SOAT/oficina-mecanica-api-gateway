@@ -69,11 +69,11 @@ Cada grupo usa a integração de mesmo nome em `openapi/gateway.yaml`, cujo dest
 
 | Grupo (`route_owner`) | Rotas | Dono atual | Listener | Observação | Swagger |
 |---|---|---|---|---|---|
-| `auth` | `POST /api/auth/login`, `ANY /api/auth/{proxy+}` | work-order | 80 | O login tem rota própria pelo limite de frequência | `GET /docs/work-order` |
-| `users` | `ANY /api/users`, `ANY /api/users/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
-| `users-customers` | `GET /api/users/{userId}/customers` | work-order | 80 | Rota exata: o vínculo usuário-cliente fica no work-order quando `users` for para o identity | `GET /docs/work-order` |
-| `me` | `GET /api/me` | work-order | 80 | Rota exata: o perfil vai para o identity, a área do cliente não | `GET /docs/work-order` |
-| `me-password` | `PATCH /api/me/password` | work-order | 80 | Rota exata, mesmo motivo de `me` | `GET /docs/work-order` |
+| `auth` | `POST /api/auth/login`, `ANY /api/auth/{proxy+}` | identity | 8081 | O login tem rota própria pelo limite de frequência | `GET /docs/identity` |
+| `users` | `ANY /api/users`, `ANY /api/users/{proxy+}` | identity | 8081 | | `GET /docs/identity` |
+| `users-customers` | `GET /api/users/{userId}/customers` | work-order | 80 | Rota exata: o vínculo usuário-cliente é do work-order, enquanto `users` é do identity | `GET /docs/work-order` |
+| `me` | `GET /api/me` | identity | 8081 | Rota exata: o perfil é do identity, a área do cliente (`me-area`) não | `GET /docs/identity` |
+| `me-password` | `PATCH /api/me/password` | identity | 8081 | Rota exata, mesmo motivo de `me` | `GET /docs/identity` |
 | `me-area` | `ANY /api/me/work-orders`, `ANY /api/me/work-orders/{proxy+}`, `ANY /api/me/quotes/{proxy+}` | work-order | 80 | Área do cliente | `GET /docs/work-order` |
 | `customers` | `ANY /api/customers`, `ANY /api/customers/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
 | `vehicles` | `ANY /api/vehicles`, `ANY /api/vehicles/{proxy+}` | work-order | 80 | | `GET /docs/work-order` |
