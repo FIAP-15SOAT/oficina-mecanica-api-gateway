@@ -67,6 +67,8 @@ O API Gateway **sobrescreve** `x-request-id` com `$context.requestId` em **todas
 
 **Trade-off aceito.** Fora do webhook, um `x-request-id` fornecido pelo cliente é descartado. Nenhum cliente atual envia; se algum passar a enviar, a alternativa é mapear para um cabeçalho adicional em vez de sobrescrever.
 
+**O trace começa no serviço.** A borda remove, em todas as integrações, os cabeçalhos `traceparent` e `tracestate` (padrão W3C Trace Context: dizem a qual trace a requisição pertence e se ele está sendo gravado) e `baggage` (padrão W3C Baggage: dados de aplicação que acompanham o trace), e o API Gateway não abre span (trecho de trace) próprio. O serviço que atende a requisição abre o trace como raiz, e as chamadas internas e as mensagens que ele publica continuam esse trace; nenhum trace liga um chamador externo ao serviço. O motivo está em [OpenAPI](openapi.md#as-integrações-por-extenso).
+
 ## O endereço de origem é atribuído no API Gateway
 
 **A aplicação não enxerga o IP do cliente, e isso é decisão fechada — não pendência.**
@@ -116,8 +118,9 @@ aws logs filter-log-events \
   --start-time "$(( ($(date +%s) - 900) * 1000 ))" \
   --query 'events[].message' --output text
 
-# 2. Pegue o requestId dela e procure na aplicação
-kubectl logs -n oficina deploy/oficina-api --tail=500 | grep -F "<requestId>"
+# 2. Pegue o requestId dela e procure no serviço dono da rota; o namespace é o
+#    contexto e o Deployment, <contexto>-service (aqui, o work-order)
+kubectl logs -n work-order deploy/work-order-service --tail=500 | grep -F "<requestId>"
 ```
 
 Os dois lados registram o mesmo valor: `requestId` no API Gateway, `request.id` na aplicação. A partir daí, o log da aplicação dá o que o API Gateway não tem — `http.route` real, duração interna, contexto de negócio — e o API Gateway dá o que a aplicação não tem: o endereço de origem e a latência total incluindo a rede.
@@ -132,7 +135,7 @@ Para a Lambda, busque no seu log group o ID da invocação (`faas.invocation_id`
 | Estrutura e sanitização do log de aplicação | [ADR 0002 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0002-logging-estruturado.md) |
 | Semântica de saúde (`/live` vs `/ready`) | [ADR 0003 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0003-health-checks.md) |
 | Métricas de negócio | Aplicação |
-| Monitor sintético contínuo | [`oficina-mecanica-custom-monitoring`](https://github.com/FIAP-15SOAT/oficina-mecanica-custom-monitoring) provisiona o Synthetic HTTP de `/api/health/ready`, usando `api_endpoint` do state deste gateway; o CD do gateway também tem procedimento manual de verificação — ver [ci-cd.md](ci-cd.md#verificação-externa-após-o-provisionamento) |
+| Monitor sintético contínuo | [`oficina-mecanica-custom-monitoring`](https://github.com/FIAP-15SOAT/oficina-mecanica-custom-monitoring) provisiona um teste Synthetic HTTP por serviço, em `/health/<contexto>` (`work-order`, `identity`, `billing` e `inventory`), usando `api_endpoint` do state deste gateway; o CD do gateway também tem procedimento manual de verificação — ver [ci-cd.md](ci-cd.md#verificação-externa-após-o-provisionamento) |
 
 ## Documentação relacionada
 

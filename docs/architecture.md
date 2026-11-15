@@ -25,6 +25,7 @@ API Gateway (HTTP API v2, stage $default)
   │  escolhe a integração do grupo da rota (dono em route_owner)
   │  aplica throttling da rota
   │  sobrescreve x-request-id = $context.requestId   (menos no webhook)
+  │  remove traceparent, tracestate e baggage        (contexto de trace de fora; ver openapi.md)
   │  sobrescreve o caminho = $request.path            (remove a porção de stage)
   ▼
 VPC Link V2 — ENIs nas subnets privadas
@@ -60,6 +61,7 @@ cliente
 API Gateway
   │  throttling restritivo da rota de login
   │  sobrescreve x-request-id = $context.requestId
+  │  remove traceparent, tracestate e baggage
   │  monta o evento no formato payload 2.0
   ▼
 função serverless (invocação de serviço; execução nas subnets privadas)
@@ -217,7 +219,7 @@ Os seguintes resultados orientam o diagnóstico. A inspeção do recurso provisi
 |---|---|
 | Porção de stage no caminho | O serviço recebe `url.path = /api/customers`, **sem** porção de stage — o mapeamento `overwrite:path` cumpre o papel |
 | Endereço de origem no serviço | `client.address` é a ENI do NLB (`::ffff:10.0.10.x`), **não** o cliente. Ver [observability.md](observability.md) |
-| Parameter mappings no recurso | `overwrite:path` em todas as integrações de serviço; `overwrite:header.x-request-id` em todas, menos `webhook-billing`. Conferir com `aws apigatewayv2 get-integrations` |
+| Parameter mappings no recurso | `overwrite:path` em todas as integrações de serviço; `overwrite:header.x-request-id` em todas, menos `webhook-billing`; `remove:header.traceparent`, `remove:header.tracestate` e `remove:header.baggage` em todas. Conferir com `aws apigatewayv2 get-integrations` |
 | Rota protegida sem credencial | `401` produzido **pelo serviço dono**, com o envelope dele |
 | Caminho não publicado, inclusive `/internal/...` | `404` produzido **pelo API Gateway** |
 | `GET /health/<contexto>` de serviço não implantado | `5xx` com `integrationError` no log de acesso, por desenho |

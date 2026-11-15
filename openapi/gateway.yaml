@@ -552,6 +552,11 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["auth"]]}'
       requestParameters:
+        # Services start each trace as root: an unsampled traceparent from outside
+        # would turn tracing off for the request and everything it publishes.
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -563,6 +568,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["users"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -574,6 +582,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["users-customers"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -585,6 +596,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["me"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -596,6 +610,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["me-password"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -607,6 +624,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["me-area"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -618,6 +638,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["customers"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -629,6 +652,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["vehicles"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -640,6 +666,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["work-orders"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -651,6 +680,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["work-orders-quotes"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -662,6 +694,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["services"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -673,6 +708,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["services-metrics"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -684,6 +722,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["parts-supplies"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -695,6 +736,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["stock"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -706,6 +750,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["quotes"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -717,6 +764,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns[route_owner["payments"]]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -728,6 +778,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["work-order"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
         overwrite:header.x-request-id: $context.requestId
 
@@ -739,6 +792,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["work-order"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/health/ready
         overwrite:header.x-request-id: $context.requestId
 
@@ -750,6 +806,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["identity"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/health/ready
         overwrite:header.x-request-id: $context.requestId
 
@@ -761,6 +820,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["billing"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/health/ready
         overwrite:header.x-request-id: $context.requestId
 
@@ -772,6 +834,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["inventory"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/health/ready
         overwrite:header.x-request-id: $context.requestId
 
@@ -783,6 +848,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["work-order"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/docs-json
         overwrite:header.x-request-id: $context.requestId
 
@@ -794,6 +862,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["identity"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/docs-json
         overwrite:header.x-request-id: $context.requestId
 
@@ -805,6 +876,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["billing"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/docs-json
         overwrite:header.x-request-id: $context.requestId
 
@@ -816,6 +890,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["inventory"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: /api/docs-json
         overwrite:header.x-request-id: $context.requestId
 
@@ -828,6 +905,9 @@ components:
       connectionId: "${vpc_link_id}"
       uri: '${service_listener_arns["billing"]}'
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:path: $request.path
 
     lambda:
@@ -836,4 +916,7 @@ components:
       payloadFormatVersion: "2.0"
       uri: "${customer_auth_integration_uri}"
       requestParameters:
+        remove:header.traceparent: "''"
+        remove:header.tracestate: "''"
+        remove:header.baggage: "''"
         overwrite:header.x-request-id: $context.requestId

@@ -63,6 +63,8 @@ O que ele **deliberadamente não faz**:
 
 Nada no caminho até o cluster tem endereço público: o balanceador é **interno**, as ENIs do VPC Link vivem nas **subnets privadas**, e a porta exposta nos nós só aceita tráfego da **CIDR da VPC**.
 
+**Contexto de trace descartado na borda.** Antes de encaminhar uma requisição a um serviço ou à função serverless, o API Gateway remove os cabeçalhos `traceparent` e `tracestate` (padrão W3C Trace Context: dizem a qual trace distribuído — o registro do caminho de uma requisição pelos serviços — ela pertence e se ele está sendo gravado) e `baggage` (padrão W3C Baggage: dados de aplicação que acompanham o trace). Assim, quem chama de fora não decide se os serviços gravam o trace, e o serviço que atende a requisição o abre. O motivo e os mapeamentos estão em [docs/openapi.md](docs/openapi.md#as-integrações-por-extenso).
+
 ### Rotas e donos
 
 | Rotas | Destino |
