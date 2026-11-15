@@ -63,11 +63,11 @@ O API Gateway **sobrescreve** `x-request-id` com `$context.requestId` em **todas
 
 `request.id` é correlação de requisição, distinta de `trace_id`/`span_id`. A Lambda não tem tracing distribuído habilitado. O login nela e uma chamada posterior a `/api/me/**` são requisições distintas e recebem IDs próprios do Gateway.
 
-**O trace começa no serviço.** A borda remove `traceparent`, `tracestate` e `baggage`, os cabeçalhos do contexto de trace W3C (dizem a qual trace a requisição pertence e se ele está sendo gravado), em todas as integrações, e o API Gateway não abre span (trecho de trace) próprio. Cada serviço abre o trace como raiz, então nenhum trace liga um chamador externo ao serviço; o motivo está em [OpenAPI](openapi.md#as-integrações-por-extenso).
-
 **Exceção: webhook do Mercado Pago.** Em `POST /webhooks/mercadopago` a borda **não** sobrescreve o `x-request-id`: o Mercado Pago calcula a assinatura `x-signature` sobre o `x-request-id` e o `data.id` que envia, e o billing precisa dos valores originais para verificá-la. Nessa rota, o `requestId` do log de acesso não aparece no log do billing; a correlação é feita pela rota (`routeKey`), pelo instante (`requestTime`) e pelo identificador da order que o billing registra.
 
 **Trade-off aceito.** Fora do webhook, um `x-request-id` fornecido pelo cliente é descartado. Nenhum cliente atual envia; se algum passar a enviar, a alternativa é mapear para um cabeçalho adicional em vez de sobrescrever.
+
+**O trace começa no serviço.** A borda remove, em todas as integrações, os cabeçalhos `traceparent` e `tracestate` (padrão W3C Trace Context: dizem a qual trace a requisição pertence e se ele está sendo gravado) e `baggage` (padrão W3C Baggage: dados de aplicação que acompanham o trace), e o API Gateway não abre span (trecho de trace) próprio. O serviço que atende a requisição abre o trace como raiz, e as chamadas internas e as mensagens que ele publica continuam esse trace; nenhum trace liga um chamador externo ao serviço. O motivo está em [OpenAPI](openapi.md#as-integrações-por-extenso).
 
 ## O endereço de origem é atribuído no API Gateway
 
@@ -118,8 +118,9 @@ aws logs filter-log-events \
   --start-time "$(( ($(date +%s) - 900) * 1000 ))" \
   --query 'events[].message' --output text
 
-# 2. Pegue o requestId dela e procure na aplicação
-kubectl logs -n oficina deploy/oficina-api --tail=500 | grep -F "<requestId>"
+# 2. Pegue o requestId dela e procure no serviço dono da rota; o namespace é o
+#    contexto e o Deployment, <contexto>-service (aqui, o work-order)
+kubectl logs -n work-order deploy/work-order-service --tail=500 | grep -F "<requestId>"
 ```
 
 Os dois lados registram o mesmo valor: `requestId` no API Gateway, `request.id` na aplicação. A partir daí, o log da aplicação dá o que o API Gateway não tem — `http.route` real, duração interna, contexto de negócio — e o API Gateway dá o que a aplicação não tem: o endereço de origem e a latência total incluindo a rede.
@@ -134,7 +135,7 @@ Para a Lambda, busque no seu log group o ID da invocação (`faas.invocation_id`
 | Estrutura e sanitização do log de aplicação | [ADR 0002 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0002-logging-estruturado.md) |
 | Semântica de saúde (`/live` vs `/ready`) | [ADR 0003 da API](https://github.com/FIAP-15SOAT/oficina-mecanica-work-order-service/blob/main/docs/adr/0003-health-checks.md) |
 | Métricas de negócio | Aplicação |
-| Monitor sintético contínuo | [`oficina-mecanica-custom-monitoring`](https://github.com/FIAP-15SOAT/oficina-mecanica-custom-monitoring) provisiona o Synthetic HTTP de `/api/health/ready`, usando `api_endpoint` do state deste gateway; o CD do gateway também tem procedimento manual de verificação — ver [ci-cd.md](ci-cd.md#verificação-externa-após-o-provisionamento) |
+| Monitor sintético contínuo | [`oficina-mecanica-custom-monitoring`](https://github.com/FIAP-15SOAT/oficina-mecanica-custom-monitoring) provisiona um teste Synthetic HTTP por serviço, em `/health/<contexto>` (`work-order`, `identity`, `billing` e `inventory`), usando `api_endpoint` do state deste gateway; o CD do gateway também tem procedimento manual de verificação — ver [ci-cd.md](ci-cd.md#verificação-externa-após-o-provisionamento) |
 
 ## Documentação relacionada
 

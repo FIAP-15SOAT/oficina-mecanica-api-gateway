@@ -63,6 +63,8 @@ O que ele **deliberadamente não faz**:
 
 Nada no caminho até o cluster tem endereço público: o balanceador é **interno**, as ENIs do VPC Link vivem nas **subnets privadas**, e a porta exposta nos nós só aceita tráfego da **CIDR da VPC**.
 
+**Contexto de trace descartado na borda.** Antes de encaminhar uma requisição a um serviço ou à função serverless, o API Gateway remove os cabeçalhos `traceparent` e `tracestate` (padrão W3C Trace Context: dizem a qual trace distribuído — o registro do caminho de uma requisição pelos serviços — ela pertence e se ele está sendo gravado) e `baggage` (padrão W3C Baggage: dados de aplicação que acompanham o trace). Assim, quem chama de fora não decide se os serviços gravam o trace, e o serviço que atende a requisição o abre. O motivo e os mapeamentos estão em [docs/openapi.md](docs/openapi.md#as-integrações-por-extenso).
+
 ### Rotas e donos
 
 | Rotas | Destino |
@@ -76,8 +78,6 @@ Nada no caminho até o cluster tem endereço público: o balanceador é **intern
 | `POST /customer-auth/login` | função serverless (`AWS_PROXY`, payload `2.0`) |
 
 Um endpoint novo sob um prefixo publicado fica acessível sem mudança aqui; um prefixo novo exige uma entrada em `route_owner` e as duas rotas no contrato. A tabela completa de donos, com listener e Swagger de cada serviço, está em [docs/openapi.md](docs/openapi.md#tabela-de-donos-das-rotas).
-
-**Contexto de trace descartado na borda.** Toda integração remove os cabeçalhos `traceparent`, `tracestate` e `baggage` antes de encaminhar a requisição. Eles formam o contexto de trace do padrão W3C Trace Context: o `traceparent` diz a qual trace distribuído (o registro do caminho de uma requisição pelos serviços) a requisição pertence e se esse trace está sendo gravado; o `tracestate` e o `baggage` levam dados extras de fornecedor e de aplicação junto dele. Sem a remoção, quem chama de fora decidiria o trace dos serviços: o Mercado Pago envia as notificações do webhook com um `traceparent` marcado como "não gravar", e o billing deixaria de registrar o trace da notificação e de tudo o que ela dispara. Com a remoção, cada serviço abre um trace novo. O `x-request-id` do webhook continua intacto. Detalhes em [docs/openapi.md](docs/openapi.md#as-integrações-por-extenso).
 
 ## 🧰 Stack
 
