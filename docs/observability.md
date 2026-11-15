@@ -63,6 +63,8 @@ O API Gateway **sobrescreve** `x-request-id` com `$context.requestId` em **todas
 
 `request.id` é correlação de requisição, distinta de `trace_id`/`span_id`. A Lambda não tem tracing distribuído habilitado. O login nela e uma chamada posterior a `/api/me/**` são requisições distintas e recebem IDs próprios do Gateway.
 
+**O trace começa no serviço.** A borda remove `traceparent`, `tracestate` e `baggage`, os cabeçalhos do contexto de trace W3C (dizem a qual trace a requisição pertence e se ele está sendo gravado), em todas as integrações, e o API Gateway não abre span (trecho de trace) próprio. Cada serviço abre o trace como raiz, então nenhum trace liga um chamador externo ao serviço; o motivo está em [OpenAPI](openapi.md#as-integrações-por-extenso).
+
 **Exceção: webhook do Mercado Pago.** Em `POST /webhooks/mercadopago` a borda **não** sobrescreve o `x-request-id`: o Mercado Pago calcula a assinatura `x-signature` sobre o `x-request-id` e o `data.id` que envia, e o billing precisa dos valores originais para verificá-la. Nessa rota, o `requestId` do log de acesso não aparece no log do billing; a correlação é feita pela rota (`routeKey`), pelo instante (`requestTime`) e pelo identificador da order que o billing registra.
 
 **Trade-off aceito.** Fora do webhook, um `x-request-id` fornecido pelo cliente é descartado. Nenhum cliente atual envia; se algum passar a enviar, a alternativa é mapear para um cabeçalho adicional em vez de sobrescrever.

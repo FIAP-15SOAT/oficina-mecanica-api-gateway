@@ -77,6 +77,8 @@ Nada no caminho até o cluster tem endereço público: o balanceador é **intern
 
 Um endpoint novo sob um prefixo publicado fica acessível sem mudança aqui; um prefixo novo exige uma entrada em `route_owner` e as duas rotas no contrato. A tabela completa de donos, com listener e Swagger de cada serviço, está em [docs/openapi.md](docs/openapi.md#tabela-de-donos-das-rotas).
 
+**Contexto de trace descartado na borda.** Toda integração remove os cabeçalhos `traceparent`, `tracestate` e `baggage` antes de encaminhar a requisição. Eles formam o contexto de trace do padrão W3C Trace Context: o `traceparent` diz a qual trace distribuído (o registro do caminho de uma requisição pelos serviços) a requisição pertence e se esse trace está sendo gravado; o `tracestate` e o `baggage` levam dados extras de fornecedor e de aplicação junto dele. Sem a remoção, quem chama de fora decidiria o trace dos serviços: o Mercado Pago envia as notificações do webhook com um `traceparent` marcado como "não gravar", e o billing deixaria de registrar o trace da notificação e de tudo o que ela dispara. Com a remoção, cada serviço abre um trace novo. O `x-request-id` do webhook continua intacto. Detalhes em [docs/openapi.md](docs/openapi.md#as-integrações-por-extenso).
+
 ## 🧰 Stack
 
 | Camada | Tecnologia |

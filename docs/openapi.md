@@ -151,6 +151,8 @@ Declaradas uma única vez em `components.x-amazon-apigateway-integrations` e ref
 | `webhook-billing` | 1 | `service_listener_arns["billing"]` | só `overwrite:path = $request.path` |
 | `lambda` | 1 | URI de invocação da função | `overwrite:header.x-request-id` |
 
+Além dos mapeamentos da tabela, as 27 integrações (16 de grupo, `work-order`, 4 de saúde, 4 de documentação, `webhook-billing` e `lambda`) removem `traceparent`, `tracestate` e `baggage` (ver abaixo).
+
 Todas as integrações de serviço são `http_proxy`, `httpMethod: ANY`, `payloadFormatVersion: "1.0"` e `connectionType: VPC_LINK`, pelo mesmo VPC Link. A `lambda` é `aws_proxy`, `POST`, `payloadFormatVersion: "2.0"`.
 
 **Por que uma integração por grupo, e não uma por serviço.** O `route_owner` entra no `uri` da integração do grupo, e as rotas referenciam a integração por um `$ref` fixo. Assim o lint resolve todos os `$ref` lendo o documento cru, e um dono inválido quebra o `plan`. Um `$ref` montado pelo template (`.../${route_owner["users"]}`) não seria resolvido pelo lint.
@@ -166,6 +168,7 @@ Todas as integrações de serviço são `http_proxy`, `httpMethod: ANY`, `payloa
 - `overwrite:path = $request.path`: a integração privada **inclui a porção de stage** no caminho enviado ao backend, e a AWS prescreve esse mapeamento para removê-la. O backend recebe `/api/customers`, não `/$default/api/customers`. Nas integrações de saúde e de documentação o caminho é fixo (`/api/health/ready` e `/api/docs-json`).
 - `overwrite:header.x-request-id = $context.requestId`: em todas, **menos no webhook**. Os serviços aceitam os caracteres de base64 usados pelo Gateway. A Lambda reutiliza somente IDs aceitos pelo seu validador; com `=`, `+` ou `/` ela usa o ID da invocação. Ver [Observabilidade](observability.md#correlação-fim-a-fim).
 - **Webhook sem `x-request-id` da borda**: a assinatura `x-signature` do Mercado Pago é calculada sobre o `x-request-id` e o `data.id` da query string originais, então a integração `webhook-billing` mapeia só o caminho. A query string passa sem mapeamento.
+- `remove:header.traceparent`, `remove:header.tracestate` e `remove:header.baggage`: em todas, inclusive no webhook e na Lambda. Os três cabeçalhos formam o contexto de trace W3C (Trace Context): o `traceparent` identifica o trace distribuído ao qual a requisição pertence e diz se ele está sendo gravado (amostrado); o `tracestate` e o `baggage` levam dados de fornecedor e de aplicação junto dele. Os serviços seguem a decisão de amostragem de quem chama, e o Mercado Pago envia o webhook com `traceparent` não amostrado: sem a remoção, o billing não gravaria o trace da notificação nem o das mensagens que ela publica. Com a remoção, cada serviço abre o trace como raiz. Nenhum dos três é cabeçalho reservado do parameter mapping, e a remoção não toca o `x-request-id` nem a query string do webhook. O valor `''` segue o exemplo da documentação da AWS; a remoção não usa o valor.
 
 ## Como o documento é validado
 
