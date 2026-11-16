@@ -245,3 +245,4 @@ job, as descrições dos steps e as dependências `needs`.
 
 Projeto acadêmico (FIAP — 15SOAT), para fins educacionais. Sem licença aberta declarada (`UNLICENSED`).
 
+
